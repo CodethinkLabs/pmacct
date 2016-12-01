@@ -1799,6 +1799,7 @@ int cfg_key_kafka_partition_key(char *filename, char *name, char *value_ptr)
   int value_len, changes = 0;
 
   value_len = strlen(value_ptr);
+  lower_string(value_ptr);
 
   if (!name) for (; list; list = list->next, changes++) {
     list->cfg.kafka_partition_key = value_ptr;

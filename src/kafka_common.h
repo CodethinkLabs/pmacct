@@ -98,6 +98,7 @@ EXT struct p_kafka_host telemetry_daemon_msglog_kafka_host;
 EXT struct p_kafka_host telemetry_dump_kafka_host;
 
 EXT int kafkap_ret_err_cb;
+EXT int dyn_partition_key;
 
 static char default_kafka_broker_host[] = "127.0.0.1";
 static int default_kafka_broker_port = 9092;

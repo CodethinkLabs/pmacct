@@ -341,9 +341,12 @@ void kafka_cache_purge(struct chained_cache *queue[], int index)
   char *empty_pcust = NULL;
   char src_mac[18], dst_mac[18], src_host[INET6_ADDRSTRLEN], dst_host[INET6_ADDRSTRLEN], ip_address[INET6_ADDRSTRLEN];
   char rd_str[SRVBUFLEN], misc_str[SRVBUFLEN], dyn_kafka_topic[SRVBUFLEN], *orig_kafka_topic = NULL;
+  char tmpbuf[LONGLONGSRVBUFLEN];
   int i, j, stop, batch_idx, is_topic_dyn = FALSE, qn = 0, ret, saved_index = index;
   int mv_num = 0, mv_num_save = 0;
   time_t start, duration;
+  struct primitives_ptrs prim_ptrs;
+  struct pkt_data dummy_data;
   pid_t writer_pid = getpid();
 
 #ifdef WITH_JANSSON
@@ -388,9 +391,15 @@ void kafka_cache_purge(struct chained_cache *queue[], int index)
   memset(&empty_pnat, 0, sizeof(struct pkt_nat_primitives));
   memset(&empty_pmpls, 0, sizeof(struct pkt_mpls_primitives));
   memset(empty_pcust, 0, config.cpptrs.len);
+  memset(&prim_ptrs, 0, sizeof(prim_ptrs));
+  memset(&dummy_data, 0, sizeof(dummy_data));
+  memset(tmpbuf, 0, sizeof(tmpbuf));
 
   p_kafka_connect_to_produce(&kafkap_kafka_host);
   p_kafka_set_broker(&kafkap_kafka_host, config.sql_host, config.kafka_broker_port);
+  if (strchr(config.kafka_partition_key, '$')) dyn_partition_key = TRUE;
+  else dyn_partition_key = FALSE;
+
   p_kafka_set_topic(&kafkap_kafka_host, config.sql_table);
   p_kafka_set_partition(&kafkap_kafka_host, config.kafka_partition);
   p_kafka_set_key(&kafkap_kafka_host, config.kafka_partition_key, config.kafka_partition_keylen);
@@ -440,6 +449,13 @@ void kafka_cache_purge(struct chained_cache *queue[], int index)
     avro_writer = avro_writer_memory(avro_buf, config.avro_buffer_size);
   }
 #endif
+
+  if (dyn_partition_key) {
+    prim_ptrs.data = &dummy_data;
+    primptrs_set_all_from_chained_cache(&prim_ptrs, queue[0]);
+    memset(tmpbuf, 0, LONGLONGSRVBUFLEN); // XXX: pedantic?
+    handle_dynname_internal_strings_same(tmpbuf, LONGSRVBUFLEN, config.kafka_partition_key, &prim_ptrs);
+  }
 
   for (j = 0; j < index; j++) {
     void *json_obj;
