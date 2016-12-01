@@ -74,6 +74,7 @@ EXT char *p_kafka_get_topic(struct p_kafka_host *);
 EXT int p_kafka_get_topic_rr(struct p_kafka_host *);
 EXT int p_kafka_get_content_type(struct p_kafka_host *);
 EXT int p_kafka_get_partition(struct p_kafka_host *);
+EXT void p_kafka_set_dynamic_partitioner(struct p_kafka_host *);
 EXT char *p_kafka_get_key(struct p_kafka_host *);
 
 EXT void p_kafka_unset_topic(struct p_kafka_host *);
@@ -88,6 +89,7 @@ EXT void p_kafka_msg_error(rd_kafka_t *, int, const char *, void *);
 EXT int p_kafka_connect_to_produce(struct p_kafka_host *);
 EXT int p_kafka_connect_to_consume(struct p_kafka_host *);
 EXT int p_kafka_produce_data(struct p_kafka_host *, void *, u_int32_t);
+EXT int p_kafka_produce_data_to_part(struct p_kafka_host *, void *, u_int32_t, int);
 EXT int p_kafka_consume_poller(struct p_kafka_host *, void **, int);
 EXT int p_kafka_consume_data(struct p_kafka_host *, void *, char *, u_int32_t);
 EXT void p_kafka_close(struct p_kafka_host *, int);
@@ -104,6 +106,7 @@ EXT struct p_kafka_host telemetry_daemon_msglog_kafka_host;
 EXT struct p_kafka_host telemetry_dump_kafka_host;
 
 EXT int kafkap_ret_err_cb;
+EXT int dyn_partition_key;
 
 static char default_kafka_broker_host[] = "127.0.0.1";
 static int default_kafka_broker_port = 9092;
