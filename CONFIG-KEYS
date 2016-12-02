@@ -667,6 +667,13 @@ DESC:		Defines the Kafka broker topic partition ID. RD_KAFKA_PARTITION_UA or ((i
 		partition). See also kafka_broker_host. 
 DEFAULT:	0
 
+KEY:		kafka_partition_dynamic
+VALUES          [ true | false ]
+DESC:		Enables dynamic Kafka partitioning, ie data is partitioned according to the value
+                of the Kafka broker topic partition key.
+                See kafka_partition_key.
+DEFAULT:	false
+
 KEY:            kafka_partition_key
 DESC:           Defines the Kafka broker topic partition key. A string of printable characters is
 		expected as value.
