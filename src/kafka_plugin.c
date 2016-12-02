@@ -401,7 +401,20 @@ void kafka_cache_purge(struct chained_cache *queue[], int index)
   else dyn_partition_key = FALSE;
 
   p_kafka_set_topic(&kafkap_kafka_host, config.sql_table);
-  p_kafka_set_partition(&kafkap_kafka_host, config.kafka_partition);
+
+  if (config.kafka_partition_dynamic && !config.kafka_partition_key) {
+    Log(LOG_ERR, "ERROR ( %s/%s ): kafka_partition_dynamic needs a kafka_partition_key to operate. Exiting.\n", config.name, config.type);
+    exit_plugin(1);
+  }
+  if (config.kafka_partition_dynamic && config.kafka_partition) {
+    Log(LOG_ERR, "ERROR ( %s/%s ): kafka_partition_dynamic and kafka_partition are mutually exclusive. Exiting.\n", config.name, config.type);
+    exit_plugin(1);
+  }
+
+  /* partition needs to be set to RD_KAFKA_PARTITION_UA for the partitioner to be used */
+  if (config.kafka_partition_dynamic) p_kafka_set_partition(&kafkap_kafka_host, RD_KAFKA_PARTITION_UA);
+  else p_kafka_set_partition(&kafkap_kafka_host, config.kafka_partition);
+
   p_kafka_set_key(&kafkap_kafka_host, config.kafka_partition_key, config.kafka_partition_keylen);
   p_kafka_set_fallback(&kafkap_kafka_host, config.kafka_fallback);
 

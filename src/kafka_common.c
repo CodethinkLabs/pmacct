@@ -56,6 +56,11 @@ void p_kafka_set_topic(struct p_kafka_host *kafka_host, char *topic)
   if (kafka_host) {
     kafka_host->topic_cfg = rd_kafka_topic_conf_new();
 
+    /* This needs to be done here otherwise kafka_host->topic_cfg is null
+     * and the partitioner cannot be set */
+    if (config.kafka_partition_dynamic && kafka_host->topic_cfg)
+      p_kafka_set_dynamic_partitioner(kafka_host);
+
     /* destroy current allocation before making a new one */
     if (kafka_host->topic) p_kafka_unset_topic(kafka_host);
 
@@ -138,6 +143,11 @@ int p_kafka_get_partition(struct p_kafka_host *kafka_host)
   if (kafka_host) return kafka_host->partition;
 
   return FALSE;
+}
+
+void p_kafka_set_dynamic_partitioner(struct p_kafka_host *kafka_host)
+{
+  rd_kafka_topic_conf_set_partitioner_cb(kafka_host->topic_cfg, &rd_kafka_msg_partitioner_consistent_random);
 }
 
 void p_kafka_set_key(struct p_kafka_host *kafka_host, char *key, int key_len)
