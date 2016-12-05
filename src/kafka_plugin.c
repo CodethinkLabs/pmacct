@@ -341,6 +341,7 @@ void kafka_cache_purge(struct chained_cache *queue[], int index)
   char *empty_pcust = NULL;
   char src_mac[18], dst_mac[18], src_host[INET6_ADDRSTRLEN], dst_host[INET6_ADDRSTRLEN], ip_address[INET6_ADDRSTRLEN];
   char rd_str[SRVBUFLEN], misc_str[SRVBUFLEN], dyn_kafka_topic[SRVBUFLEN], *orig_kafka_topic = NULL;
+  char elem_part_key[SRVBUFLEN];
   char tmpbuf[LONGLONGSRVBUFLEN];
   int i, j, stop, batch_idx, is_topic_dyn = FALSE, qn = 0, ret, saved_index = index;
   int mv_num = 0, mv_num_save = 0;
@@ -415,7 +416,9 @@ void kafka_cache_purge(struct chained_cache *queue[], int index)
   if (config.kafka_partition_dynamic) p_kafka_set_partition(&kafkap_kafka_host, RD_KAFKA_PARTITION_UA);
   else p_kafka_set_partition(&kafkap_kafka_host, config.kafka_partition);
 
-  p_kafka_set_key(&kafkap_kafka_host, config.kafka_partition_key, config.kafka_partition_keylen);
+  if (!dyn_partition_key)
+    p_kafka_set_key(&kafkap_kafka_host, config.kafka_partition_key, config.kafka_partition_keylen);
+
   p_kafka_set_fallback(&kafkap_kafka_host, config.kafka_fallback);
 
   if (config.message_broker_output & PRINT_OUTPUT_JSON) p_kafka_set_content_type(&kafkap_kafka_host, PM_KAFKA_CNT_TYPE_STR);
@@ -463,13 +466,6 @@ void kafka_cache_purge(struct chained_cache *queue[], int index)
   }
 #endif
 
-  if (dyn_partition_key) {
-    prim_ptrs.data = &dummy_data;
-    primptrs_set_all_from_chained_cache(&prim_ptrs, queue[0]);
-    memset(tmpbuf, 0, LONGLONGSRVBUFLEN); // XXX: pedantic?
-    handle_dynname_internal_strings_same(tmpbuf, LONGSRVBUFLEN, config.kafka_partition_key, &prim_ptrs);
-  }
-
   for (j = 0; j < index; j++) {
     void *json_obj;
     char *json_str;
@@ -493,6 +489,15 @@ void kafka_cache_purge(struct chained_cache *queue[], int index)
     else pvlen = NULL;
 
     if (queue[j]->valid == PRINT_CACHE_FREE) continue;
+
+    if (dyn_partition_key) {
+      prim_ptrs.data = &dummy_data;
+      primptrs_set_all_from_chained_cache(&prim_ptrs, queue[0]);
+      memset(tmpbuf, 0, LONGLONGSRVBUFLEN); // XXX: pedantic?
+      strlcpy(elem_part_key, config.kafka_partition_key, SRVBUFLEN);
+      handle_dynname_internal_strings_same(tmpbuf, LONGSRVBUFLEN, elem_part_key, &prim_ptrs);
+      p_kafka_set_key(&kafkap_kafka_host, elem_part_key, strlen(elem_part_key));
+    }
 
     if (config.message_broker_output & PRINT_OUTPUT_JSON) {
       json_obj = compose_json(config.what_to_count, config.what_to_count_2, queue[j]->flow_type,
