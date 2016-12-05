@@ -676,7 +676,17 @@ DEFAULT:	false
 
 KEY:            kafka_partition_key
 DESC:           Defines the Kafka broker topic partition key. A string of printable characters is
-		expected as value.
+		expected as value. Dynamic names are supported through the use of variables, which
+		are computed at the moment data is purged to the backend. The list of supported
+		variables follows:
+		$peer_src_ip	Record value for peer_src_ip primitive (if primitive is not part of
+				the aggregation method then this will be set to a null value).
+
+		$tag		Record value for tag primitive ((if primitive is not part of the
+				aggregation method then this will be set to a null value).
+
+		$tag2		Record value for tag2 primitive ((if primitive is not part of the
+				aggregation method then this will be set to a null value).
 DEFAULT:	none
 
 KEY:		[ kafka_fallback | plugin_pipe_kafka_fallback ]
