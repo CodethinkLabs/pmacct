@@ -695,7 +695,7 @@ void kafka_avro_schema_purge()
   struct p_kafka_host kafka_avro_schema_host;
   avro_writer_t avro_writer;
   char *avro_buf = NULL;
-  int ret;
+  int ret, part, part_cnt, tpc;
 
   /* setting some defaults */
   if (!config.kafka_avro_schema_topic) return;
@@ -729,7 +729,34 @@ void kafka_avro_schema_purge()
   }
 
   if (avro_writer_tell(avro_writer)) {
-    ret = p_kafka_produce_data(&kafka_avro_schema_host, avro_buf, strlen(avro_buf));
+      if (config.kafka_partition_dynamic) {
+        rd_kafka_resp_err_t err;
+        const struct rd_kafka_metadata *metadata;
+
+        err = rd_kafka_metadata(kafka_avro_schema_host.rk, 0, kafka_avro_schema_host.topic, &metadata, 5000);
+        if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
+          Log(LOG_ERR, "ERROR ( %s/%s ): Unable to get Kafka metadata for topic %s: %s\n",
+                  config.name, config.type, kafka_avro_schema_host.topic, rd_kafka_err2str(err));
+          exit_plugin(1);
+        }
+
+        part_cnt = -1;
+        for (tpc = 0 ; tpc < metadata->topic_cnt ; tpc++) {
+          const struct rd_kafka_metadata_topic *t = &metadata->topics[tpc];
+          if (!strcmp(t->topic, config.kafka_avro_schema_topic)) {
+              part_cnt = t->partition_cnt;
+              break;
+          }
+        }
+
+        for(part = 0; part < part_cnt; part++) {
+          ret = p_kafka_produce_data_to_part(&kafka_avro_schema_host, avro_buf, strlen(avro_buf), part);
+        }
+      }
+      else {
+        ret = p_kafka_produce_data(&kafka_avro_schema_host, avro_buf, strlen(avro_buf));
+      }
+
     avro_writer_free(avro_writer);
   }
 

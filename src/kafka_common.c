@@ -255,19 +255,19 @@ int p_kafka_connect_to_consume(struct p_kafka_host *kafka_host)
   return SUCCESS;
 }
 
-int p_kafka_produce_data(struct p_kafka_host *kafka_host, void *data, u_int32_t data_len)
+int p_kafka_produce_data_to_part(struct p_kafka_host *kafka_host, void *data, u_int32_t data_len, int part)
 {
   int ret = SUCCESS;
 
   kafkap_ret_err_cb = FALSE;
 
   if (kafka_host && kafka_host->rk && kafka_host->topic) {
-    ret = rd_kafka_produce(kafka_host->topic, kafka_host->partition, RD_KAFKA_MSG_F_COPY,
+    ret = rd_kafka_produce(kafka_host->topic, part, RD_KAFKA_MSG_F_COPY,
 			   data, data_len, kafka_host->key, kafka_host->key_len, NULL);
 
     if (ret == ERR) {
       Log(LOG_ERR, "ERROR ( %s/%s ): Failed to produce to topic %s partition %i: %s\n", config.name, config.type,
-          rd_kafka_topic_name(kafka_host->topic), kafka_host->partition, rd_kafka_err2str(rd_kafka_errno2err(errno)));
+          rd_kafka_topic_name(kafka_host->topic), part, rd_kafka_err2str(rd_kafka_errno2err(errno)));
       p_kafka_close(kafka_host, TRUE);
     }
   }
@@ -276,6 +276,11 @@ int p_kafka_produce_data(struct p_kafka_host *kafka_host, void *data, u_int32_t 
   rd_kafka_poll(kafka_host->rk, 0);
 
   return ret; 
+}
+
+int p_kafka_produce_data(struct p_kafka_host *kafka_host, void *data, u_int32_t data_len)
+{
+  return p_kafka_produce_data_to_part(kafka_host, data, data_len, kafka_host->partition);
 }
 
 int p_kafka_manage_consumer(struct p_kafka_host *kafka_host, int is_start)
