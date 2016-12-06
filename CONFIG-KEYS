@@ -687,6 +687,21 @@ DESC:           Defines the Kafka broker topic partition key. A string of printa
 
 		$tag2		Record value for tag2 primitive ((if primitive is not part of the
 				aggregation method then this will be set to a null value).
+
+		$src_host	Record value for src_host primitive ((if primitive is not part of
+                                the aggregation method then this will be set to a null value).
+
+		$dst_host	Record value for dst_host primitive ((if primitive is not part of
+                                the aggregation method then this will be set to a null value).
+
+		$src_port	Record value for src_port primitive ((if primitive is not part of
+                                the aggregation method then this will be set to a null value).
+
+		$dst_port	Record value for dst_port primitive ((if primitive is not part of
+                                the aggregation method then this will be set to a null value).
+
+		$proto		Record value for proto primitive ((if primitive is not part of the
+				aggregation method then this will be set to a null value).
 DEFAULT:	none
 
 KEY:		[ kafka_fallback | plugin_pipe_kafka_fallback ]
