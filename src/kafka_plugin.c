@@ -492,7 +492,7 @@ void kafka_cache_purge(struct chained_cache *queue[], int index)
 
     if (dyn_partition_key) {
       prim_ptrs.data = &dummy_data;
-      primptrs_set_all_from_chained_cache(&prim_ptrs, queue[0]);
+      primptrs_set_all_from_chained_cache(&prim_ptrs, queue[j]);
       memset(tmpbuf, 0, LONGLONGSRVBUFLEN); // XXX: pedantic?
       strlcpy(elem_part_key, config.kafka_partition_key, SRVBUFLEN);
       handle_dynname_internal_strings_same(tmpbuf, LONGSRVBUFLEN, elem_part_key, &prim_ptrs);
