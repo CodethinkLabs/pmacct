@@ -196,8 +196,144 @@ struct template_cache_entry *insert_template(struct template_hdr_v9 *hdr, struct
 
   log_template_footer(ptr, ptr->len, version);
 
+#ifdef WITH_JANSSON
+  if (config.nfacctd_templates_file)
+    save_template(ptr, config.nfacctd_templates_file);
+#endif
+
   return ptr;
 }
+
+#ifdef WITH_JANSSON
+void save_template(struct template_cache_entry *tpl, char *file)
+{
+  u_int16_t field_idx;
+  u_int8_t idx;
+  char *fmt;
+  char ip_addr[INET6_ADDRSTRLEN];
+  json_t *root = json_object(), *agent_obj, *kv;
+  json_t *tpl_array, *ext_db_array, *list_array;
+  FILE *tpl_file = open_output_file(config.nfacctd_templates_file, "a", TRUE);
+    Log(LOG_ERR, "ERROR ( %s/core ): Opened output file.\n", config.name);
+
+  addr_to_str(ip_addr, &tpl->agent);
+  kv = json_pack("{ss}", "agent", ip_addr);
+  json_object_update_missing(root, kv);
+  json_decref(kv);
+
+  kv = json_pack("{sI}", "source_id", tpl->source_id);
+  json_object_update_missing(root, kv);
+  json_decref(kv);
+
+  kv = json_pack("{sI}", "template_id", tpl->template_id);
+  json_object_update_missing(root, kv);
+  json_decref(kv);
+
+  kv = json_pack("{sI}", "template_type", tpl->template_type);
+  json_object_update_missing(root, kv);
+  json_decref(kv);
+
+  kv = json_pack("{sI}", "num", tpl->num);
+  json_object_update_missing(root, kv);
+  json_decref(kv);
+
+  kv = json_pack("{sI}", "len", tpl->len);
+  json_object_update_missing(root, kv);
+  json_decref(kv);
+
+  kv = json_pack("{sI}", "vlen", tpl->vlen);
+  json_object_update_missing(root, kv);
+  json_decref(kv);
+
+  tpl_array = json_array();
+  for (field_idx = 0; field_idx < NF9_MAX_DEFINED_FIELD; field_idx++) {
+    json_t *json_otpl_field = json_object();
+
+    kv = json_pack("{sI}", "off", tpl->tpl[field_idx].off);
+    json_object_update_missing(json_otpl_field, kv);
+    json_decref(kv);
+
+    kv = json_pack("{sI}", "len", tpl->tpl[field_idx].len);
+    json_object_update_missing(json_otpl_field, kv);
+    json_decref(kv);
+
+    kv = json_pack("{sI}", "tpl_len", tpl->tpl[field_idx].tpl_len);
+    json_object_update_missing(json_otpl_field, kv);
+    json_decref(kv);
+
+    json_array_append_new(tpl_array, json_otpl_field);
+  }
+  json_object_set_new(root, "tpl", tpl_array);
+
+  ext_db_array = json_array();
+  for (field_idx = 0; field_idx < TPL_EXT_DB_ENTRIES; field_idx++) {
+    json_t *json_tfd_field = json_object();
+
+    for (idx = 0; idx < IES_PER_TPL_EXT_DB_ENTRY; idx++) {
+      json_t *json_utpl_field = json_object();
+
+      kv = json_pack("{sI}", "pen", tpl->ext_db[field_idx].ie[idx].pen);
+      json_object_update_missing(json_utpl_field, kv);
+      json_decref(kv);
+
+      kv = json_pack("{sI}", "type", tpl->ext_db[field_idx].ie[idx].type);
+      json_object_update_missing(json_utpl_field, kv);
+      json_decref(kv);
+
+      kv = json_pack("{sI}", "off", tpl->ext_db[field_idx].ie[idx].off);
+      json_object_update_missing(json_utpl_field, kv);
+      json_decref(kv);
+
+      kv = json_pack("{sI}", "len", tpl->ext_db[field_idx].ie[idx].len);
+      json_object_update_missing(json_utpl_field, kv);
+      json_decref(kv);
+
+      kv = json_pack("{sI}", "tpl_len", tpl->ext_db[field_idx].ie[idx].tpl_len);
+      json_object_update_missing(json_utpl_field, kv);
+      json_decref(kv);
+
+      kv = json_pack("{sI}", "repeat_id", tpl->ext_db[field_idx].ie[idx].repeat_id);
+      json_object_update_missing(json_utpl_field, kv);
+      json_decref(kv);
+
+      json_array_append_new(json_tfd_field, json_utpl_field);
+    }
+    json_array_append_new(ext_db_array, json_tfd_field);
+  }
+  json_object_set_new(root, "ext_db", ext_db_array);
+
+  list_array = json_array();
+  for (field_idx = 0; field_idx < TPL_LIST_ENTRIES; field_idx++) {
+    json_t *json_tfl_field = json_object();
+
+    kv = json_pack("{sI}", "type", tpl->list[field_idx].type);
+    json_object_update_missing(json_tfl_field, kv);
+    json_decref(kv);
+
+    kv = json_pack("{ss}", "ptr", tpl->list[field_idx].ptr);  //FIXME: reference to either ext_db or tpl entry
+    json_object_update_missing(json_tfl_field, kv);
+    json_decref(kv);
+
+    json_array_append_new(list_array, json_tfl_field);
+  }
+  json_object_set_new(root, "list", list_array);
+
+  /* NB: member `next` is willingly excluded from serialisation, since
+   * it would make more sense for it to be computed when de-serializing,
+   * to prevent the template cache from being corrupted. */
+
+  if (root) {
+      write_and_free_json(tpl_file, root);
+  }
+
+  close_output_file(tpl_file);
+    Log(LOG_ERR, "ERROR ( %s/core ): closed output file.\n", config.name);
+}
+#else
+void save_template(template_cache_entry *tpl, char *file) {
+  if (config.debug) Log(LOG_DEBUG, "DEBUG ( %s/%s ): save_template(): JSON object not created due to missing --enable-jansson\n", config.name, config.type);
+}
+#endif
 
 struct template_cache_entry *refresh_template(struct template_hdr_v9 *hdr, struct template_cache_entry *tpl, struct packet_ptrs *pptrs, u_int16_t tpl_type,
 						u_int32_t sid, u_int16_t *pens, u_int8_t version, u_int16_t len, u_int32_t seq)
