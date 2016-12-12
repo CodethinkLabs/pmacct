@@ -809,6 +809,10 @@ EXT struct utpl_field *ext_db_get_next_ie(struct template_cache_entry *, u_int16
 
 EXT void resolve_vlen_template(char *, struct template_cache_entry *);
 EXT u_int8_t get_ipfix_vlen(char *, u_int16_t *);
+
+EXT struct template_cache_entry *nfacctd_offline_read_json_template(char *, char *, int);
+EXT void load_templates_from_file(char *);
+EXT void save_template(struct template_cache_entry *, char *);
 #undef EXT
 
 #if (!defined __PKT_HANDLERS_C)

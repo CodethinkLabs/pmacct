@@ -205,6 +205,50 @@ struct template_cache_entry *insert_template(struct template_hdr_v9 *hdr, struct
 }
 
 #ifdef WITH_JANSSON
+void load_templates_from_file(char *path)
+{
+  FILE *tmp_file = fopen(path, "r");
+  char errbuf[SRVBUFLEN], *tmpbuf;
+  int line = 1;
+
+  tmpbuf = malloc(LARGEBUFLEN);
+  if (!tmpbuf) {
+    Log(LOG_ERR, "ERROR ( %s/core ): load_templates_from_file(): unable to malloc() tmpbuf. File skipped.\n",
+	config.name);
+    return;
+  }
+
+  if (!tmp_file) {
+    Log(LOG_WARNING, "WARN ( %s/core ): [%s] load_templates_from_file(): unable to fopen(). File skipped.\n",
+               config.name, path);
+    return;
+  }
+
+  int tpl_idx = 0;
+  struct template_cache_entry *tpl, *prev_tpl;
+
+  while (fgets(tmpbuf, LARGEBUFLEN, tmp_file)) {
+    tpl = nfacctd_offline_read_json_template(tmpbuf, errbuf, SRVBUFLEN);
+    if (tpl == NULL) {
+      Log(LOG_WARNING, "WARN ( %s/core ): [%s:%u] %s\n", config.name, path, line, errbuf);
+    }
+    else {
+      /* We assume the cache is empty when templates are loaded */
+      tpl_cache.c[tpl_idx] = tpl;
+      if (prev_tpl) prev_tpl->next = tpl;
+      prev_tpl = tpl;
+      tpl_cache.num++;
+      Log(LOG_WARNING, "WARN ( %s/core ): Loaded template %d into cache.\n", config.name, tpl_idx);
+      tpl_idx++;
+    }
+
+    line++;
+  }
+
+  free(tmpbuf);
+  fclose(tmp_file);
+}
+
 void save_template(struct template_cache_entry *tpl, char *file)
 {
   u_int16_t field_idx;
@@ -322,9 +366,264 @@ void save_template(struct template_cache_entry *tpl, char *file)
   close_output_file(tpl_file);
     Log(LOG_ERR, "ERROR ( %s/core ): closed output file.\n", config.name);
 }
+
+struct template_cache_entry *nfacctd_offline_read_json_template(char *buf, char *errbuf, int errlen)
+{
+  struct template_cache_entry *ret = NULL;
+  u_int16_t field_idx;
+
+  json_error_t json_err;
+  json_t *json_obj;
+
+  json_obj = json_loads(buf, 0, &json_err);
+
+  if (!json_obj) {
+    snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): json_loads() error: %s. Line skipped.\n", json_err.text);
+  }
+  else {
+    if (!json_is_object(json_obj)) {
+      snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): json_is_object() failed. Line skipped.\n");
+    }
+    else {
+      ret = malloc(sizeof(struct template_cache_entry));
+      if (!ret) {
+        snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): Unable to allocate enough memory for a new Template Cache Entry.\n");
+        return NULL;
+      }
+
+      memset(ret, 0, sizeof(struct template_cache_entry));
+
+      json_t *json_tpl_id = json_object_get(json_obj, "template_id");
+      if (json_tpl_id == NULL) {
+        snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): template ID null. Line skipped.\n");
+        free(ret);
+        return NULL;
+      }
+      else {
+        ret->template_id = json_integer_value(json_tpl_id);
+      }
+
+      free(json_tpl_id);
+
+      json_t *json_src_id = json_object_get(json_obj, "source_id");
+      if (json_src_id == NULL) {
+        snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): source ID null. Line skipped.\n");
+        free(ret);
+        return NULL;
+      }
+      else {
+        ret->source_id = json_integer_value(json_src_id);
+      }
+
+      free(json_src_id);
+
+      json_t *json_tpl_type = json_object_get(json_obj, "template_type");
+      if (json_tpl_type == NULL) {
+        snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): template type null. Line skipped.\n");
+        free(ret);
+        return NULL;
+      }
+      else {
+        ret->template_type = json_integer_value(json_tpl_type);
+      }
+
+      free(json_tpl_type);
+
+      json_t *json_num = json_object_get(json_obj, "num");
+      if (json_num == NULL) {
+        snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): num null. Line skipped.\n");
+        free(ret);
+        return NULL;
+      }
+      else {
+        ret->num = json_integer_value(json_num);
+      }
+
+      free(json_num);
+
+      json_t *json_len = json_object_get(json_obj, "len");
+      if (json_len == NULL) {
+        snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): len null. Line skipped.\n");
+        free(ret);
+        return NULL;
+      }
+      else {
+        ret->len = json_integer_value(json_len);
+      }
+
+      free(json_len);
+
+      json_t *json_vlen = json_object_get(json_obj, "vlen");
+      if (json_vlen == NULL) {
+        snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): vlen null. Line skipped.\n");
+        free(ret);
+        return NULL;
+      }
+      else {
+        ret->vlen = json_integer_value(json_vlen);
+      }
+
+      free(json_vlen);
+
+      json_t *json_agent = json_object_get(json_obj, "agent");
+      const char *agent_str = json_string_value(json_agent);
+      if(!str_to_addr(agent_str, &ret->agent)) {
+        snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): error creating agent.\n");
+        free(ret);
+        return NULL;
+      }
+
+      json_t *json_list = json_object_get(json_obj, "list");
+      if (!json_is_array(json_list))
+        snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): error parsing template fields list.\n");
+      else {
+          size_t key;
+          json_t *value;
+          int idx = 0;
+          json_array_foreach(json_list, key, value) {
+            if (json_object_iter_at(value, "pen") == NULL) {
+              ret->list[idx].type = TPL_TYPE_LEGACY;
+              struct otpl_field *otpl = malloc(sizeof(struct otpl_field));
+              if (!otpl) {
+                snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): Unable to allocate enough memory for a new legacy template field.\n");
+                free(ret);
+                return NULL;
+              }
+              memset(otpl, 0, sizeof (struct otpl_field));
+
+              json_t *json_otpl_member = json_object_get(value, "off");
+              if (json_otpl_member == NULL) {
+                snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): off null. Line skipped.\n");
+                free(ret);
+                return NULL;
+              }
+              else {
+                otpl->off = json_integer_value(json_otpl_member);
+              }
+
+              json_otpl_member = json_object_get(value, "len");
+              if (json_otpl_member == NULL) {
+                snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): len null. Line skipped.\n");
+                free(ret);
+                return NULL;
+              }
+              else {
+                otpl->len = json_integer_value(json_otpl_member);
+              }
+
+              json_otpl_member = json_object_get(value, "tpl_len");
+              if (json_otpl_member == NULL) {
+                snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): tpl_len null. Line skipped.\n");
+                free(ret);
+                return NULL;
+              }
+              else {
+                otpl->tpl_len = json_integer_value(json_otpl_member);
+              }
+
+              ret->list[idx].ptr = (char *) otpl;
+              free(json_otpl_member);
+            }
+            else {
+              ret->list[idx].type = TPL_TYPE_EXT_DB;
+              struct utpl_field *utpl = malloc(sizeof(struct utpl_field));
+              if (!utpl) {
+                snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): Unable to allocate enough memory for a new ext_db template field.\n");
+                free(ret);
+                return NULL;
+              }
+              memset(utpl, 0, sizeof(struct utpl_field));
+
+              json_t *json_utpl_member = json_object_get(value, "pen");
+              if (json_utpl_member == NULL) {
+                snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): pen null. Line skipped.\n");
+                free(ret);
+                return NULL;
+              }
+              else {
+                utpl->pen = json_integer_value(json_utpl_member);
+              }
+
+              json_utpl_member = json_object_get(value, "type");
+              if (json_utpl_member == NULL) {
+                snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): type null. Line skipped.\n");
+                free(ret);
+                return NULL;
+              }
+              else {
+                utpl->type = json_integer_value(json_utpl_member);
+              }
+
+              json_utpl_member = json_object_get(value, "off");
+              if (json_utpl_member == NULL) {
+                snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): off null. Line skipped.\n");
+                free(ret);
+                return NULL;
+              }
+              else {
+                utpl->off = json_integer_value(json_utpl_member);
+              }
+
+              json_utpl_member = json_object_get(value, "len");
+              if (json_utpl_member == NULL) {
+                snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): len null. Line skipped.\n");
+                free(ret);
+                return NULL;
+              }
+              else {
+                utpl->len = json_integer_value(json_utpl_member);
+              }
+
+              json_utpl_member = json_object_get(value, "tpl_len");
+              if (json_utpl_member == NULL) {
+                snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): tpl_len null. Line skipped.\n");
+                free(ret);
+                return NULL;
+              }
+              else {
+                utpl->tpl_len = json_integer_value(json_utpl_member);
+              }
+
+              json_utpl_member = json_object_get(value, "repeat_id");
+              if (json_utpl_member == NULL) {
+                snprintf(errbuf, errlen, "nfacctd_offline_read_json_template(): repeat_id null. Line skipped.\n");
+                free(ret);
+                return NULL;
+              }
+              else {
+                utpl->repeat_id = json_integer_value(json_utpl_member);
+              }
+
+              ret->list[idx].ptr = (char *) utpl;
+              free(json_utpl_member);
+            }
+            idx++;
+          }
+          free(value);
+      }
+
+      free (json_list);
+      return ret;
+    }
+
+    json_decref(json_obj);
+  }
+  return ret;
+}
 #else
-void save_template(template_cache_entry *tpl, char *file) {
-  if (config.debug) Log(LOG_DEBUG, "DEBUG ( %s/%s ): save_template(): JSON object not created due to missing --enable-jansson\n", config.name, config.type);
+void load_templates_from_file(char *path)
+{
+  if (config.debug) Log(LOG_DEBUG, "DEBUG ( %s/core ): load_templates_from_file(): JSON object not created due to missing --enable-jansson\n", config.name);
+}
+
+void save_template(struct template_cache_entry *tpl, char *file)
+{
+  if (config.debug) Log(LOG_DEBUG, "DEBUG ( %s/core ): save_template(): JSON object not created due to missing --enable-jansson\n", config.name);
+}
+
+struct template_cache_entry *nfacctd_offline_read_json_template(char *buf, char *errbuf, int errlen)
+{
+  if (config.debug) Log(LOG_DEBUG, "DEBUG ( %s/core ): nfacctd_offline_read_json_template(): JSON object not created due to missing --enable-jansson\n", config.name);
 }
 #endif
 

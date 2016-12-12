@@ -778,6 +778,10 @@ int main(int argc,char **argv, char **envp)
   memset(&tpl_cache, 0, sizeof(tpl_cache));
   tpl_cache.num = TEMPLATE_CACHE_ENTRIES;
 
+  if (config.nfacctd_templates_file) {
+    load_templates_from_file(config.nfacctd_templates_file);
+  }
+
   /* arranging static pointers to dummy packet; to speed up things into the
      main loop we mantain two packet_ptrs structures when IPv6 is enabled:
      we will sync here 'pptrs6' for common tables and pointers */
