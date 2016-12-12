@@ -245,74 +245,67 @@ void save_template(struct template_cache_entry *tpl, char *file)
   json_object_update_missing(root, kv);
   json_decref(kv);
 
-  tpl_array = json_array();
-  for (field_idx = 0; field_idx < NF9_MAX_DEFINED_FIELD; field_idx++) {
-    json_t *json_otpl_field = json_object();
-
-    kv = json_pack("{sI}", "off", tpl->tpl[field_idx].off);
-    json_object_update_missing(json_otpl_field, kv);
-    json_decref(kv);
-
-    kv = json_pack("{sI}", "len", tpl->tpl[field_idx].len);
-    json_object_update_missing(json_otpl_field, kv);
-    json_decref(kv);
-
-    kv = json_pack("{sI}", "tpl_len", tpl->tpl[field_idx].tpl_len);
-    json_object_update_missing(json_otpl_field, kv);
-    json_decref(kv);
-
-    json_array_append_new(tpl_array, json_otpl_field);
-  }
-  json_object_set_new(root, "tpl", tpl_array);
-
-  ext_db_array = json_array();
-  for (field_idx = 0; field_idx < TPL_EXT_DB_ENTRIES; field_idx++) {
-    json_t *json_tfd_field = json_object();
-
-    for (idx = 0; idx < IES_PER_TPL_EXT_DB_ENTRY; idx++) {
-      json_t *json_utpl_field = json_object();
-
-      kv = json_pack("{sI}", "pen", tpl->ext_db[field_idx].ie[idx].pen);
-      json_object_update_missing(json_utpl_field, kv);
-      json_decref(kv);
-
-      kv = json_pack("{sI}", "type", tpl->ext_db[field_idx].ie[idx].type);
-      json_object_update_missing(json_utpl_field, kv);
-      json_decref(kv);
-
-      kv = json_pack("{sI}", "off", tpl->ext_db[field_idx].ie[idx].off);
-      json_object_update_missing(json_utpl_field, kv);
-      json_decref(kv);
-
-      kv = json_pack("{sI}", "len", tpl->ext_db[field_idx].ie[idx].len);
-      json_object_update_missing(json_utpl_field, kv);
-      json_decref(kv);
-
-      kv = json_pack("{sI}", "tpl_len", tpl->ext_db[field_idx].ie[idx].tpl_len);
-      json_object_update_missing(json_utpl_field, kv);
-      json_decref(kv);
-
-      kv = json_pack("{sI}", "repeat_id", tpl->ext_db[field_idx].ie[idx].repeat_id);
-      json_object_update_missing(json_utpl_field, kv);
-      json_decref(kv);
-
-      json_array_append_new(json_tfd_field, json_utpl_field);
-    }
-    json_array_append_new(ext_db_array, json_tfd_field);
-  }
-  json_object_set_new(root, "ext_db", ext_db_array);
-
   list_array = json_array();
-  for (field_idx = 0; field_idx < TPL_LIST_ENTRIES; field_idx++) {
+  for (field_idx = 0; field_idx < tpl->num; field_idx++) {
     json_t *json_tfl_field = json_object();
 
     kv = json_pack("{sI}", "type", tpl->list[field_idx].type);
     json_object_update_missing(json_tfl_field, kv);
     json_decref(kv);
 
-    kv = json_pack("{ss}", "ptr", tpl->list[field_idx].ptr);  //FIXME: reference to either ext_db or tpl entry
-    json_object_update_missing(json_tfl_field, kv);
-    json_decref(kv);
+    /* idea: depending on tpl->list[field_idx].type,
+     * serialize either an otpl_field (if TPL_TYPE_LEGACY) or
+     * an utpl_field (if TPL_TYPE_EXT_DB) */
+    if (tpl->list[field_idx].type == TPL_TYPE_LEGACY){
+      struct otpl_field *otpl_field = (struct otpl_field *) tpl->list[field_idx].ptr;
+      json_t *json_otpl_field = json_object();
+
+      kv = json_pack("{sI}", "off", otpl_field->off);
+      json_object_update_missing(json_otpl_field, kv);
+      json_decref(kv);
+
+      kv = json_pack("{sI}", "len", otpl_field->len);
+      json_object_update_missing(json_otpl_field, kv);
+      json_decref(kv);
+
+      kv = json_pack("{sI}", "tpl_len", otpl_field->tpl_len);
+      json_object_update_missing(json_otpl_field, kv);
+      json_decref(kv);
+
+      json_object_update_missing(json_tfl_field, json_otpl_field);
+      json_decref(json_otpl_field);
+    }
+    else if (tpl->list[field_idx].type == TPL_TYPE_EXT_DB) {
+      struct utpl_field *ext_db_ptr = (struct utpl_field *) tpl->list[field_idx].ptr;
+      json_t *json_utpl_field = json_object();
+
+      kv = json_pack("{sI}", "pen", ext_db_ptr->pen);
+      json_object_update_missing(json_utpl_field, kv);
+      json_decref(kv);
+
+      kv = json_pack("{sI}", "type", ext_db_ptr->type);
+      json_object_update_missing(json_utpl_field, kv);
+      json_decref(kv);
+
+      kv = json_pack("{sI}", "off", ext_db_ptr->off);
+      json_object_update_missing(json_utpl_field, kv);
+      json_decref(kv);
+
+      kv = json_pack("{sI}", "len", ext_db_ptr->len);
+      json_object_update_missing(json_utpl_field, kv);
+      json_decref(kv);
+
+      kv = json_pack("{sI}", "tpl_len", ext_db_ptr->tpl_len);
+      json_object_update_missing(json_utpl_field, kv);
+      json_decref(kv);
+
+      kv = json_pack("{sI}", "repeat_id", ext_db_ptr->repeat_id);
+      json_object_update_missing(json_utpl_field, kv);
+      json_decref(kv);
+
+      json_object_update_missing(json_tfl_field, json_utpl_field);
+      json_decref(json_utpl_field);
+    }
 
     json_array_append_new(list_array, json_tfl_field);
   }
