@@ -41,13 +41,13 @@ struct template_cache_entry *handle_template(struct template_hdr_v9 *hdr, struct
 
   /* 0 NetFlow v9, 2 IPFIX */
   if (tpl_type == 0 || tpl_type == 2) {
-    if (tpl = find_template(hdr->template_id, pptrs, tpl_type, sid))
+    if (tpl = find_template(hdr->template_id, (struct host_addr *) pptrs->f_agent, tpl_type, sid))
       tpl = refresh_template(hdr, tpl, pptrs, tpl_type, sid, pens, version, len, seq);
     else tpl = insert_template(hdr, pptrs, tpl_type, sid, pens, version, len, seq);
   }
   /* 1 NetFlow v9, 3 IPFIX */
   else if (tpl_type == 1 || tpl_type == 3) {
-    if (tpl = find_template(hdr->template_id, pptrs, tpl_type, sid))
+    if (tpl = find_template(hdr->template_id, (struct host_addr *) pptrs->f_agent, tpl_type, sid))
       tpl = refresh_opt_template(hdr, tpl, pptrs, tpl_type, sid, version, len, seq);
     else tpl = insert_opt_template(hdr, pptrs, tpl_type, sid, version, len, seq);
   }
@@ -55,7 +55,7 @@ struct template_cache_entry *handle_template(struct template_hdr_v9 *hdr, struct
   return tpl;
 }
 
-struct template_cache_entry *find_template(u_int16_t id, struct packet_ptrs *pptrs, u_int16_t tpl_type, u_int32_t sid)
+struct template_cache_entry *find_template(u_int16_t id, struct host_addr *agent, u_int16_t tpl_type, u_int32_t sid)
 {
   struct template_cache_entry *ptr;
   u_int16_t modulo = (ntohs(id)%tpl_cache.num);
@@ -63,7 +63,7 @@ struct template_cache_entry *find_template(u_int16_t id, struct packet_ptrs *ppt
   ptr = tpl_cache.c[modulo];
 
   while (ptr) {
-    if ((ptr->template_id == id) && (!sa_addr_cmp((struct sockaddr *)pptrs->f_agent, &ptr->agent)) &&
+    if ((ptr->template_id == id) && (!sa_addr_cmp((struct sockaddr *)agent, &ptr->agent)) &&
 	(ptr->source_id == sid))
       return ptr;
     else ptr = ptr->next;
@@ -210,6 +210,7 @@ void load_templates_from_file(char *path)
   FILE *tmp_file = fopen(path, "r");
   char errbuf[SRVBUFLEN], *tmpbuf;
   int line = 1;
+  u_int16_t modulo;
 
   tmpbuf = malloc(LARGEBUFLEN);
   if (!tmpbuf) {
@@ -219,13 +220,12 @@ void load_templates_from_file(char *path)
   }
 
   if (!tmp_file) {
-    Log(LOG_WARNING, "WARN ( %s/core ): [%s] load_templates_from_file(): unable to fopen(). File skipped.\n",
+    Log(LOG_ERR, "ERROR ( %s/core ): [%s] load_templates_from_file(): unable to fopen(). File skipped.\n",
                config.name, path);
     return;
   }
 
-  int tpl_idx = 0;
-  struct template_cache_entry *tpl, *prev_tpl;
+  struct template_cache_entry *tpl, *prev_ptr = NULL, *ptr = NULL;
 
   while (fgets(tmpbuf, LARGEBUFLEN, tmp_file)) {
     tpl = nfacctd_offline_read_json_template(tmpbuf, errbuf, SRVBUFLEN);
@@ -234,14 +234,27 @@ void load_templates_from_file(char *path)
     }
     else {
       /* We assume the cache is empty when templates are loaded */
-      tpl_cache.c[tpl_idx] = tpl;
-      if (prev_tpl) prev_tpl->next = tpl;
-      prev_tpl = tpl;
-      tpl_cache.num++;
-      Log(LOG_WARNING, "WARN ( %s/core ): Loaded template %d into cache.\n", config.name, tpl_idx);
-      tpl_idx++;
+      if (find_template(tpl->template_id, &tpl->agent, tpl->template_type, tpl->source_id))
+        Log(LOG_DEBUG, "WARN ( %s/core ): Template %d already exists in cache. Skipping\n",
+                config.name, tpl->template_id);
+      else {
+        modulo = (ntohs(tpl->template_id)%tpl_cache.num);
+        ptr = tpl_cache.c[modulo];
+
+        while (ptr) {
+          prev_ptr = ptr;
+          ptr = ptr->next;
+        }
+
+        if (prev_ptr) prev_ptr->next = tpl;
+        else tpl_cache.c[modulo] = tpl;
+
+        Log(LOG_DEBUG, "DEBUG ( %s/core ): Loaded template %d into cache.\n",
+                config.name, tpl->template_id);
+      }
     }
 
+    prev_ptr = NULL;
     line++;
   }
 

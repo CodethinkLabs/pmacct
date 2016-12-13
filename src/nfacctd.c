@@ -1381,7 +1381,7 @@ void process_v9_packet(unsigned char *pkt, u_int16_t len, struct packet_ptrs_vec
     pkt += NfDataHdrV9Sz;
     flowoff += NfDataHdrV9Sz;
 
-    tpl = find_template(data_hdr->flow_id, pptrs, fid, SourceId);
+    tpl = find_template(data_hdr->flow_id, (struct host_addr *) pptrs->f_agent, fid, SourceId);
     if (!tpl) {
       sa_to_addr((struct sockaddr *)pptrs->f_agent, &debug_a, &debug_agent_port);
       addr_to_str(debug_agent_addr, &debug_a);
