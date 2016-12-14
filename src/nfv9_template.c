@@ -262,6 +262,124 @@ void load_templates_from_file(char *path)
   fclose(tmp_file);
 }
 
+void update_template_in_file(struct template_cache_entry *tpl, char *path)
+{
+  FILE *tmp_file = fopen(path, "r");
+  char *tmpbuf;
+  char tpl_agent_str[INET6_ADDRSTRLEN];
+  const char *addr;
+  int line = 0, tpl_found = 0;
+  u_int16_t tpl_id, tpl_type;
+  u_int32_t src_id;
+
+  tmpbuf = malloc(LARGEBUFLEN);
+  if (!tmpbuf) {
+    Log(LOG_ERR, "ERROR ( %s/core ): update_template_in_file(): unable to malloc() tmpbuf. Update skipped.\n",
+	config.name);
+    return;
+  }
+
+  if (!tmp_file) {
+    Log(LOG_WARNING, "WARN ( %s/core ): [%s] update_template_in_file(): unable to fopen(). Update skipped.\n",
+               config.name, path);
+    return;
+  }
+
+  /* Find line where our template is stored */
+  while (fgets(tmpbuf, LARGEBUFLEN, tmp_file)) {
+    json_error_t json_err;
+    json_t *json_obj;
+
+    json_obj = json_loads(tmpbuf, 0, &json_err);
+
+    if (!json_obj) {
+      Log(LOG_WARNING, "WARN ( %s/core ): [%s] update_template_in_file(): json_loads() error: %s. Line skipped.\n",
+              config.name, path, json_err.text);
+      continue;
+    }
+    else {
+      if (!json_is_object(json_obj)) {
+        Log(LOG_WARNING, "WARN ( %s/core ): [%s] update_template_in_file(): json_is_object() failed. Line skipped.\n",
+                config.name, path);
+        continue;
+      }
+      else {
+        json_t *json_tpl_id = json_object_get(json_obj, "template_id");
+        if (json_tpl_id == NULL) {
+          Log(LOG_WARNING, "WARN ( %s/core ): [%s] update_template_in_file(): template ID null. Line skipped.\n",
+                  config.name, path);
+          continue;
+        }
+        else {
+          tpl_id = json_integer_value(json_tpl_id);
+        }
+
+        free(json_tpl_id);
+
+        json_t *json_agent = json_object_get(json_obj, "agent");
+        if (json_agent == NULL) {
+          Log(LOG_WARNING, "WARN ( %s/core ): [%s] update_template_in_file(): agent null. Line skipped.\n",
+                  config.name, path);
+          continue;
+        }
+        else {
+          addr = json_string_value(json_agent);
+        }
+
+        free(json_agent);
+
+        json_t *json_src_id = json_object_get(json_obj, "source_id");
+        if (json_src_id == NULL) {
+          Log(LOG_WARNING, "WARN ( %s/core ): [%s] update_template_in_file(): source ID null. Line skipped.\n",
+                  config.name, path);
+          continue;
+        }
+        else {
+          src_id = json_integer_value(json_src_id);
+        }
+
+        free(json_src_id);
+
+        json_t *json_tpl_type = json_object_get(json_obj, "template_type");
+        if (json_tpl_type == NULL) {
+          Log(LOG_WARNING, "WARN ( %s/core ): [%s] update_template_in_file(): template type null. Line skipped.\n",
+                  config.name, path);
+          continue;
+        }
+        else {
+          tpl_type = json_integer_value(json_tpl_type);
+        }
+
+        free(json_tpl_type);
+      }
+
+      addr_to_str(tpl_agent_str, &tpl->agent);
+      if (tpl_id == tpl->template_id && tpl_type == tpl->template_type
+              && src_id == tpl->source_id && !strcmp(addr, tpl_agent_str)) {
+        tpl_found = 1;
+        break;
+      }
+    }
+    line++;
+  }
+
+  if (tpl_found == 0)
+    Log(LOG_WARNING, "WARN ( %s/core ): [%s] update_template_in_file(): Template %d not found.\n",
+            config.name, path, tpl->template_id);
+  else {
+    if (delete_line_from_file(line, path) != 0) {
+      Log(LOG_WARNING, "WARN ( %s/core ): [%s] update_template_in_file(): Error deleting old template. New version not saved.\n",
+              config.name, path);
+    }
+    else {
+      save_template(tpl, path);
+    }
+  }
+
+  free(tmpbuf);
+  fclose(tmp_file);
+}
+
 void save_template(struct template_cache_entry *tpl, char *file)
 {
   u_int16_t field_idx;
@@ -271,7 +389,6 @@ void save_template(struct template_cache_entry *tpl, char *file)
   json_t *root = json_object(), *agent_obj, *kv;
   json_t *tpl_array, *ext_db_array, *list_array;
   FILE *tpl_file = open_output_file(config.nfacctd_templates_file, "a", TRUE);
-    Log(LOG_ERR, "ERROR ( %s/core ): Opened output file.\n", config.name);
 
   addr_to_str(ip_addr, &tpl->agent);
   kv = json_pack("{ss}", "agent", ip_addr);
@@ -374,10 +491,11 @@ void save_template(struct template_cache_entry *tpl, char *file)
 
   if (root) {
       write_and_free_json(tpl_file, root);
+      Log(LOG_DEBUG, "DEBUG ( %s/core ): Saved template %d into file.\n",
+              config.name, tpl->template_id);
   }
 
   close_output_file(tpl_file);
-    Log(LOG_ERR, "ERROR ( %s/core ): closed output file.\n", config.name);
 }
 
 struct template_cache_entry *nfacctd_offline_read_json_template(char *buf, char *errbuf, int errlen)
@@ -629,6 +747,11 @@ void load_templates_from_file(char *path)
   if (config.debug) Log(LOG_DEBUG, "DEBUG ( %s/core ): load_templates_from_file(): JSON object not created due to missing --enable-jansson\n", config.name);
 }
 
+void update_template_in_file(struct template_cache_entry *tpl, char *path)
+{
+  if (config.debug) Log(LOG_DEBUG, "DEBUG ( %s/core ): update_template_in_file(): JSON object not created due to missing --enable-jansson\n", config.name);
+}
+
 void save_template(struct template_cache_entry *tpl, char *file)
 {
   if (config.debug) Log(LOG_DEBUG, "DEBUG ( %s/core ): save_template(): JSON object not created due to missing --enable-jansson\n", config.name);
@@ -744,6 +867,11 @@ struct template_cache_entry *refresh_template(struct template_hdr_v9 *hdr, struc
   }
 
   log_template_footer(tpl, tpl->len, version);
+
+#ifdef WITH_JANSSON
+  if (config.nfacctd_templates_file)
+    update_template_in_file(tpl, config.nfacctd_templates_file);
+#endif
 
   return tpl;
 }
