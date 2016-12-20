@@ -178,6 +178,9 @@ struct configuration {
   char *kafka_fallback;
   char *kafka_avro_schema_topic;
   int kafka_avro_schema_refresh_time;
+  char *statsd_host;
+  int statsd_port;
+  int statsd_refresh_time;
   int print_cache_entries;
   int print_markers;
   int print_output;

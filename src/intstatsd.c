@@ -331,6 +331,8 @@ int main(int argc,char **argv, char **envp)
   }
   else Log(LOG_INFO, "INFO ( %s/core ): Reading configuration from cmdline.\n", config.name);
 
+  if (!config.statsd_refresh_time) config.statsd_refresh_time = STATS_REFRESH_TIME_DEFAULT;
+
   /* Enforcing policies over aggregation methods */
   list = plugins_list;
   while (list) {

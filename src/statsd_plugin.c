@@ -66,6 +66,10 @@ void statsd_plugin(int pipe_fd, struct configuration *cfgptr, void *ptr)
 
   timeout = config.sql_refresh_time*1000;
 
+  /* setting defaults */
+  if (!config.statsd_host) config.statsd_host = STATSD_HOST_DEFAULT;
+  if (!config.statsd_port) config.statsd_port = STATSD_PORT_DEFAULT;
+
   /* setting function pointers */
   insert_func = P_cache_insert;
   purge_func = statsd_cache_purge;

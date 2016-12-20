@@ -1011,7 +1011,7 @@ DESC:		Defines the password to use when connecting to the server. In MongoDB, if
 DEFAULT:	'arealsmartpwd'
 
 KEY:		[ sql_refresh_time | print_refresh_time | mongo_refresh_time | amqp_refresh_time |
-		  kafka_refresh_time ] (-r)
+		  kafka_refresh_time | statsd_refresh_time ] (-r)
 DESC:		Time interval, in seconds, between consecutive executions of the plugin cache scanner. The
 		scanner purges data into the plugin backend. Note: internally all these config directives
 		write to the same variable; when using multiple plugins it is recommended to bind refresh
@@ -2542,3 +2542,11 @@ KEY:		telemetry_daemon_ipprec [GLOBAL]
 DESC:           Marks self-originated Streaming Telemetry messages with the supplied IP precedence value.
 		Applies to TCP sessions only.
 DEFAULT:        0
+
+KEY:		statsd_host [GLOBAL]
+DESC:           TODO
+DEFAULT:        none
+
+KEY:		statsd_port [GLOBAL]
+DESC:           TODO
+DEFAULT:        none
