@@ -73,6 +73,7 @@ endif
 if USING_THREADPOOL
 libdaemons_la_SOURCES += thread_pool.c thread_pool.h
 endif
+libdaemons_la_SOURCES += statsd_plugin.c statsd_plugin.h
 
 pmacctd_SOURCES = pmacctd.c
 pmacctd_LDADD = libdaemons.la

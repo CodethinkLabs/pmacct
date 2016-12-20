@@ -208,6 +208,7 @@ EXT void print_plugin(int, struct configuration *, void *);
 EXT void nfprobe_plugin(int, struct configuration *, void *);
 EXT void sfprobe_plugin(int, struct configuration *, void *);
 EXT void tee_plugin(int, struct configuration *, void *);
+EXT void statsd_plugin(int, struct configuration *, void *);
 
 #ifdef WITH_MYSQL
 EXT void mysql_plugin(int, struct configuration *, void *);
