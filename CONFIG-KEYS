@@ -2544,9 +2544,9 @@ DESC:           Marks self-originated Streaming Telemetry messages with the supp
 DEFAULT:        0
 
 KEY:		statsd_host [GLOBAL]
-DESC:           TODO
-DEFAULT:        none
+DESC:           StatsD (https://github.com/etsy/statsd) instance IP to send data to.
+DEFAULT:        127.0.0.1
 
 KEY:		statsd_port [GLOBAL]
-DESC:           TODO
-DEFAULT:        none
+DESC:           StatsD (https://github.com/etsy/statsd) instance port to send data to.
+DEFAULT:        8125

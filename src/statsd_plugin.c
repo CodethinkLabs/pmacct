@@ -21,6 +21,7 @@
 
 /* includes */
 #include "pmacct.h"
+#include "addr.h"
 #include "pmacct-data.h"
 #include "plugin_hooks.h"
 #include "plugin_common.h"
@@ -36,7 +37,7 @@ void statsd_plugin(int pipe_fd, struct configuration *cfgptr, void *ptr)
   struct insert_data idata;
   time_t t;
   int timeout, refresh_timeout;
-  int ret, num;
+  int ret, num, sd;
   struct ring *rg = &((struct channels_list_entry *)ptr)->rg;
   struct ch_status *status = ((struct channels_list_entry *)ptr)->status;
   struct plugins_list_entry *plugin_data = ((struct channels_list_entry *)ptr)->plugin;
@@ -98,6 +99,8 @@ void statsd_plugin(int pipe_fd, struct configuration *cfgptr, void *ptr)
 
   idata.now = time(NULL);
 
+  sd = init_statsd_sock();
+
   /* print_refresh time init: deadline */
   refresh_deadline = idata.now;
   P_init_refresh_deadline(&refresh_deadline, config.sql_refresh_time, config.sql_startup_delay, config.sql_history_roundoff);
@@ -111,6 +114,8 @@ void statsd_plugin(int pipe_fd, struct configuration *cfgptr, void *ptr)
     status->wakeup = TRUE;
     calc_refresh_timeout(refresh_deadline, idata.now, &refresh_timeout);
 
+    Log(LOG_ERR, "ERROR ( %s/%s ): Sending test data... \n", config.name, config.type);
+    send_data("test:42|c", sd);
     pfd.fd = pipe_fd;
     pfd.events = POLLIN;
     timeout = refresh_timeout;
@@ -213,6 +218,7 @@ void statsd_plugin(int pipe_fd, struct configuration *cfgptr, void *ptr)
       if (!config.pipe_amqp) goto read_data;
     }
   }
+  close(sd);
 }
 
 void statsd_cache_purge(struct chained_cache *queue[], int index)
@@ -342,4 +348,80 @@ void statsd_cache_purge(struct chained_cache *queue[], int index)
 		config.name, config.type, writer_pid, qn, saved_index, duration);
 
   if (empty_pcust) free(empty_pcust);
+}
+
+int init_statsd_sock() {
+  int sock, slen;
+  int rc, ret, yes=1, no=0, buflen=0;
+  struct host_addr addr;
+#if defined ENABLE_IPV6
+  struct sockaddr_storage server, dest_sockaddr;
+#else
+  struct sockaddr server, dest_sockaddr;
+#endif
+
+  memset(&server, 0, sizeof(server));
+  memset(&dest_sockaddr, 0, sizeof(dest_sockaddr));
+
+  trim_spaces(config.statsd_host);
+  ret = str_to_addr("127.0.0.1", &addr); // TODO store address in config key instead of hardcoding it
+  if (!ret) {
+    Log(LOG_ERR, "ERROR ( %s/%s ): $CONFIG_KEY value is not a valid IPv4/IPv6 address. Terminating.\n", config.name, config.type);
+    exit_all(1);
+  }
+  slen = addr_to_sa((struct sockaddr *)&server, &addr, 8124); // TODO store port in config key instead of hardcoding it
+
+  sock = socket(((struct sockaddr *)&server)->sa_family, SOCK_DGRAM, 0);
+
+  if (sock < 0) {
+    Log(LOG_ERR, "ERROR ( %s/%s ): socket() failed. Terminating.\n", config.name, config.type);
+    exit_all(1);
+  }
+
+  /* bind socket to port */
+  rc = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char *)&yes, sizeof(yes));
+  if (rc < 0) Log(LOG_ERR, "WARN ( %s/%s ): setsockopt() failed for SO_REUSEADDR.\n", config.name, config.type);
+
+#if (defined ENABLE_IPV6) && (defined IPV6_BINDV6ONLY)
+  rc = setsockopt(sock, IPPROTO_IPV6, IPV6_BINDV6ONLY, (char *) &no, (socklen_t) sizeof(no));
+  if (rc < 0) Log(LOG_ERR, "WARN ( %s/%s ): setsockopt() failed for IPV6_BINDV6ONLY.\n", config.name, config.type);
+#endif
+
+  rc = bind(sock, (struct sockaddr *) &server, slen);
+  if (rc < 0) {
+    Log(LOG_ERR, "ERROR ( %s/%s ): bind() to ip=%s port=%d/udp failed (errno: %d).\n", config.name, config.type, config.statsd_host, config.statsd_port, errno);
+    exit(1);
+  }
+  return sock;
+}
+
+
+int send_data(char *data, int sd) {
+  int dest_addr_len;
+  int ret, buflen=0;
+  char databuf[SRVBUFLEN];
+  struct host_addr dest_addr;
+#if defined ENABLE_IPV6
+  struct sockaddr_storage server, dest_sockaddr;
+#else
+  struct sockaddr server, dest_sockaddr;
+#endif
+
+  memset(databuf, 0, sizeof(databuf));
+
+  ret = str_to_addr(config.statsd_host, &dest_addr);
+  if (!ret) {
+    Log(LOG_ERR, "ERROR ( %s/%s ): statsd_host value is not a valid IPv4/IPv6 address. Terminating.\n", config.name, config.type);
+    exit_all(1);
+  }
+  dest_addr_len = addr_to_sa((struct sockaddr *)&dest_sockaddr, &dest_addr, config.statsd_port);
+  memcpy(databuf, data, strlen(data));
+  buflen += strlen(data);
+  databuf[buflen] = '\x4'; /* EOT */
+
+  ret = sendto(sd, databuf, buflen, 0, &dest_sockaddr, dest_addr_len);
+  if (ret == -1)
+    Log(LOG_ERR, "ERROR ( %s/%s ): Error sending message :%s\n", config.name, config.type, strerror(errno));
+
+  return ret;
 }
