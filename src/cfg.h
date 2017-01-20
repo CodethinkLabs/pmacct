@@ -77,6 +77,7 @@ struct configuration {
   pm_cfgreg_t what_to_count_2;	/* second registry */
   pm_cfgreg_t nfprobe_what_to_count;
   pm_cfgreg_t nfprobe_what_to_count_2;
+  pm_cfgreg_t metrics_what_to_count;
   char *aggregate_primitives;
   struct custom_primitives_ptrs cpptrs;
   char *name;
@@ -530,6 +531,7 @@ struct configuration {
   int tmp_net_own_field;
   int tmp_asa_bi_flow;
   int tmp_comms_same_field;
+  int intstats_daemon;
   size_t thread_stack;
 };
 

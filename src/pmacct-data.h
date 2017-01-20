@@ -837,6 +837,8 @@ static const struct _dictionary_line dictionary[] = {
   {"tmp_net_own_field", cfg_key_tmp_net_own_field},
   {"tmp_asa_bi_flow", cfg_key_tmp_asa_bi_flow},
   {"tmp_comms_same_field", cfg_key_tmp_comms_same_field},
+  {"metric", cfg_key_metrics},
+  {"intstats_daemon", cfg_key_intstats_daemon},
   {"", NULL},
 };
 
