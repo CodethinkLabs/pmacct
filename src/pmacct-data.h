@@ -843,32 +843,32 @@ static const struct _dictionary_line dictionary[] = {
 };
 
 static struct plugin_type_entry plugin_types_list[] = {
-  {PLUGIN_ID_CORE, 	"core", 	NULL},
-  {PLUGIN_ID_MEMORY, 	"memory", 	imt_plugin},
-  {PLUGIN_ID_PRINT,	"print",	print_plugin},
-  {PLUGIN_ID_NFPROBE,	"nfprobe",	nfprobe_plugin},
-  {PLUGIN_ID_SFPROBE,	"sfprobe",	sfprobe_plugin},
+  {PLUGIN_ID_CORE, 	"core", 	NULL,           NULL},
+  {PLUGIN_ID_MEMORY, 	"memory", 	imt_plugin,     NULL},
+  {PLUGIN_ID_PRINT,	"print",	print_plugin,   NULL},
+  {PLUGIN_ID_NFPROBE,	"nfprobe",	nfprobe_plugin, NULL},
+  {PLUGIN_ID_SFPROBE,	"sfprobe",	sfprobe_plugin, NULL},
 #ifdef WITH_MYSQL
-  {PLUGIN_ID_MYSQL,	"mysql",	mysql_plugin},
+  {PLUGIN_ID_MYSQL,	"mysql",	mysql_plugin,   NULL},
 #endif
 #ifdef WITH_PGSQL
-  {PLUGIN_ID_PGSQL,	"pgsql",	pgsql_plugin},
+  {PLUGIN_ID_PGSQL,	"pgsql",	pgsql_plugin,   NULL},
 #endif
 #ifdef WITH_SQLITE3
-  {PLUGIN_ID_SQLITE3,	"sqlite3",	sqlite3_plugin},
+  {PLUGIN_ID_SQLITE3,	"sqlite3",	sqlite3_plugin, NULL},
 #endif
 #ifdef WITH_MONGODB
-  {PLUGIN_ID_MONGODB,   "mongodb",      mongodb_plugin},
+  {PLUGIN_ID_MONGODB,   "mongodb",      mongodb_plugin, NULL},
 #endif
 #ifdef WITH_RABBITMQ
-  {PLUGIN_ID_AMQP,	"amqp",		amqp_plugin},
+  {PLUGIN_ID_AMQP,	"amqp",		amqp_plugin,    NULL},
 #endif
 #ifdef WITH_KAFKA
-  {PLUGIN_ID_KAFKA,     "kafka",        kafka_plugin},
+  {PLUGIN_ID_KAFKA,     "kafka",        kafka_plugin,   NULL},
 #endif
-  {PLUGIN_ID_TEE,	"tee",		tee_plugin},
-  {PLUGIN_ID_STATSD,	"statsd",	statsd_plugin},
-  {PLUGIN_ID_UNKNOWN,	"",		NULL},
+  {PLUGIN_ID_TEE,	"tee",		tee_plugin,     NULL},
+  {PLUGIN_ID_STATSD,	"statsd",	statsd_plugin,  NULL},
+  {PLUGIN_ID_UNKNOWN,	"",		NULL,           NULL},
 };
 #endif
 

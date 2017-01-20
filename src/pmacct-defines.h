@@ -27,7 +27,6 @@
 #define ARGS_PMTELEMETRYD "hVL:l:f:dDS:F:"
 #define ARGS_PMBGPD "hVL:l:f:dDS:F:"
 #define ARGS_PMBMPD "hVL:l:f:dDS:F:"
-#define ARGS_INTSTATSD "dDhP:b:f:F:c:m:p:r:s:S:o:O:uRVaA:E:"
 #define ARGS_PMACCT "Ssc:Cetm:p:P:M:arN:n:lT:O:E:uDVUoiIx"
 #define N_PRIMITIVES 57
 #define N_FUNCS 10 
@@ -92,7 +91,6 @@
 #define PMTELEMETRYD_USAGE_HEADER "Streaming Network Telemetry Daemon, pmtelemetryd 1.6.2-git"
 #define PMBGPD_USAGE_HEADER "pmacct BGP Collector Daemon, pmbgpd 1.6.2-git"
 #define PMBMPD_USAGE_HEADER "pmacct BMP Collector Daemon, pmbmpd 1.6.2-git"
-#define INTSTATS_USAGE_HEADER "pmacct Internal Stats Daemon, intstatsd 1.6.2-git"
 #define PMACCT_COMPILE_ARGS COMPILE_ARGS
 #ifndef TRUE
 #define TRUE 1

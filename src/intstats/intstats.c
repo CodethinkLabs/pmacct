@@ -1,0 +1,526 @@
+/*
+    pmacct (Promiscuous mode IP Accounting package)
+    pmacct is Copyright (C) 2003-2016 by Paolo Lucente
+*/
+
+/*
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+*/
+
+/* defines */
+#define __INTSTATSD_C
+
+/* includes */
+#include "pmacct.h"
+#include "addr.h"
+#include "thread_pool.h"
+#include "intstats.h"
+#include "pmacct-data.h"
+#include "plugin_hooks.h"
+
+/* variables to be exported away */
+thread_pool_t *intstats_pool;
+struct stats_channel_entry stats_channels_list[MAX_N_PLUGINS]; /* stats communication channels: core <-> plugins */
+struct channels_list_entry *channels_list; // TODO make it usable for several daemons
+struct daemon_stats_linked_func *daemon_stats_funcs = NULL; /* pointer to first daemon stats generation function */
+
+//TODO: note: stats will only work for one daemon at a time in the current config
+// if several daemons have config enabled, each wrapper will trigger config for its daemon and
+// all the previous ones (if all of this code works properly)
+/* Functions */
+#if defined ENABLE_THREADS
+void intstats_wrapper(const struct channels_list_entry *chan_list, void (*func)())
+{
+  struct intstats_data *t_data;
+  struct daemon_stats_linked_func *dslf = NULL, *prev_dslf = NULL;
+
+  /* initialize threads pool */
+  intstats_pool = allocate_thread_pool(1);
+  assert(intstats_pool);
+  Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): %d thread(s) initialized\n", config.name, 1);
+
+  t_data = malloc(sizeof(struct intstats_data));
+  if (!t_data) {
+    Log(LOG_ERR, "ERROR ( %s/core/STATS ): malloc() struct intstats_data failed. Terminating.\n", config.name);
+    exit_all(1);
+  }
+  intstats_prepare_thread(t_data);
+
+  channels_list = chan_list;
+  if (daemon_stats_funcs) dslf = daemon_stats_funcs;
+
+  while (dslf) {
+    prev_dslf = dslf;
+    dslf = dslf->next;
+  }
+  dslf = malloc(sizeof(struct daemon_stats_linked_func));
+  if (!dslf) {
+    Log(LOG_ERR, "ERROR ( %s/core/STATS ): Unable to allocate enough memory for a new daemon stats linked function.\n", config.name);
+    return;
+  }
+  memset(dslf, 0, sizeof(struct daemon_stats_linked_func));
+
+  dslf->func = func;
+  if (prev_dslf) prev_dslf->next = dslf;
+
+  if (!prev_dslf) daemon_stats_funcs = dslf;
+
+  /* giving a kick to the intstats thread */
+  send_to_pool(intstats_pool, intstats_daemon, t_data);
+  Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): intstats_daemon sent to pool\n", config.name);
+}
+#endif
+
+void intstats_prepare_thread(struct intstats_data *t_data)
+{
+  if (!t_data) return;
+
+  memset(t_data, 0, sizeof(struct intstats_data));
+  t_data->is_thread = TRUE;
+  t_data->log_str = malloc(strlen("core/STATS") + 1);
+  strcpy(t_data->log_str, "core/STATS");
+}
+
+void intstats_daemon(void *t_data_void)
+{
+  struct metric *met, *met_tmp = NULL;
+  time_t start, end;
+  sighandler_t prev_sig;
+  int sock, nb_children, nb_term;
+  int counter = 0, test; // TEST
+
+  met = malloc(sizeof(struct metric));
+  if (!met) {
+    Log(LOG_ERR, "ERROR ( %s/core/STATS ): Unable to allocate enough memory for a new metric structure.\n", config.name);
+    exit(1);
+  }
+
+  memset(met, 0, sizeof(struct metric));
+
+  if (init_metrics(&met) <= 0) {
+    Log(LOG_ERR, "ERROR ( %s/core/STATS ): Error during metrics initialisation. Exiting.\n", config.name);
+    exit(1);
+  }
+  //check_test_met(met);
+  Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): metric values initialised\n", config.name);
+
+  sock = init_statsd_sock();
+  Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): socket initialized\n", config.name);
+
+  //XXX: this periodicity implementation assumes stats collection and sending combined are shorter than configured period
+  Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): CONFIGURED REFRESH TIME: %d\n", config.name, config.statsd_refresh_time);
+  while (1) {
+    nb_children = 0;
+    nb_term = 0;
+    start = time(NULL);
+    reset_metrics_values(met);
+    Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): metric values reset\n", config.name);
+
+    nb_children += launch_core_daemons(met);
+    Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): core daemon launched\n", config.name);
+    nb_children += launch_plugins_daemons(met);
+    Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): plugins daemon launched\n", config.name);
+
+    plugin_buffers_generate_stats(met);
+
+    //print_metrics(met);
+
+    while (wait(NULL) > 0) {
+      nb_term++;
+      Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): thread %d/%d has terminated. \n", config.name, nb_term, nb_children);
+      if (nb_term == nb_children) break;
+    }
+
+    met_tmp = met;
+    while(met_tmp) {
+      send_data(met_tmp, sock);
+      met_tmp = met_tmp->next;
+    }
+    end = time(NULL);
+    prev_sig = signal(SIGCHLD, SIG_IGN); /* SIGCHLD has to be ignored otherwise sleep is interrupted */
+    test = sleep(MAX(0, config.statsd_refresh_time - (end - start)));
+    signal(SIGCHLD, prev_sig);
+    Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): --------- finished iteration #%d (%u left to sleep)\n", config.name, counter, test);
+    counter++;
+  }
+}
+
+int check_test_met(struct metric const *met_ptr)
+{
+  //XXX: Test function. Can be safely deleted once internal stats are stable
+  int cnt = 0;
+  struct metric *tmp;
+
+  tmp = met_ptr;
+  while (tmp) { cnt++; tmp = tmp->next; }
+  Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): TEST: %d metrics found (%p)\n", config.name, cnt, met_ptr);
+
+  return cnt;
+}
+
+void print_metrics(struct metric *ptr)
+{
+  //XXX: Test function. Can be safely deleted once internal stats are stable
+  struct metric *tmp;
+  tmp = ptr;
+
+  while(tmp) {
+    Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): address: %p, \n", config.name, tmp);
+    Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): label: %s, \n", config.name, tmp->type.label);
+    Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): type: %d, \n", config.name, tmp->type.type);
+    Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): statsd_fmt: %d, \n", config.name, tmp->type.statsd_fmt);
+    Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): id: %d, \n", config.name, tmp->type.id);
+
+    switch(tmp->type.type) {
+      case STATS_TYPE_INT:
+        Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): value (int): %d, \n", config.name, tmp->int_value);
+        break;
+      case STATS_TYPE_LONGINT:
+        Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): value (long int): %ld, \n", config.name, tmp->long_value);
+        break;
+      case STATS_TYPE_FLOAT:
+        Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): value (float): %f, \n", config.name, tmp->float_value);
+        break;
+      case STATS_TYPE_STRING:
+        Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): value (string): %s, \n", config.name, tmp->string_value);
+        break;
+      default:
+        Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): ERROR: no type found, \n", config.name, tmp->string_value);
+        break;
+    }
+    tmp = tmp->next;
+  }
+}
+
+
+int launch_plugins_daemons(struct metric *met_ptr)
+{
+  int pid, ret, index = 0, thread_cnt = 0;
+  struct plugins_list_entry *list = plugins_list;
+  struct stats_channel_entry *chptr;
+  unsigned char stats_data[STATS_MSG_SIZE];
+
+  /* Create communication channels for each plugin for which
+   * stats are required */
+
+  while (list) {
+    /* internal stats have to be explicitly enabled by plugin in the config */
+     printf("does %s:%s have a stats function? %s\n", list->name, list->type.string, list->type.stats_func? "YES" : "NO");
+    if (list->cfg.intstats_daemon && list->type.stats_func) {
+     printf("Launching plugin thread for %s:%s\n", list->name, list->type.string);
+
+     //TODO check: are 2 nested loops over plugins really necessary here?
+      while (index < MAX_N_PLUGINS) {
+        chptr = &stats_channels_list[index];
+        if (!chptr->used) {
+          socketpair(AF_UNIX, SOCK_DGRAM, 0, chptr->pipe);
+          switch (pid = fork()) {
+            case -1: /* Something went wrong */
+              Log(LOG_WARNING, "WARN ( %s/%s ): Unable to initialize stats generation in: %s\n", list->name, list->type.string, strerror(errno));
+              //delete_pipe_channel(list->pipe[1]);
+              break;
+            case 0: /* Child */
+            /* SIGCHLD handling issue: SysV avoids zombies by ignoring SIGCHLD; to emulate
+               such semantics on BSD systems, we need a handler like handle_falling_child() */
+#if defined (IRIX) || (SOLARIS)
+              signal(SIGCHLD, SIG_IGN);
+#else
+              signal(SIGCHLD, ignore_falling_child);
+#endif
+
+#if defined HAVE_MALLOPT
+              mallopt(M_CHECK_ACTION, 0);
+#endif
+
+              /*
+              close(config.sock);
+              close(config.bgp_sock);
+              if (!list->cfg.pipe_amqp) close(list->pipe[1]);
+              */
+              /* TODO find a way to communicate metrics (→ before computation and ← once computed)
+               * without the plugin stats_func needing met_ptr as a parameter
+               * (plugin_hooks.h shouldn't need to know about internal stats structures */
+              (*list->type.stats_func)(0);
+              exit(0);
+            default: /* Parent */
+              /*
+              if (!list->cfg.pipe_amqp) {
+                close(list->pipe[0]);
+                setnonblocking(list->pipe[1]);
+              }
+              */
+              break;
+          }
+
+          chptr->plugin = list;
+          chptr->used = 1;
+          break;
+        }
+        index++;
+      }
+    }
+    list = list->next;
+  }
+  return thread_cnt;
+}
+
+int launch_core_daemons(struct metric *met_ptr)
+{
+  struct plugins_list_entry *list = plugins_list;
+  struct daemon_stats_linked_func *dslf;
+  int pid, status, thread_cnt = 0;
+
+  dslf = daemon_stats_funcs;
+  if(!dslf) Log(LOG_ERR, "dslf NULL\n");
+  while (dslf) {
+    if(dslf->func) {
+      switch (pid = fork()) {
+        case -1: /* Something went wrong */
+          Log(LOG_WARNING, "WARN ( %s/core ): Unable to initialize stats generation in daemon: %s\n", config.name, config.proc_name, strerror(errno));
+          //delete_pipe_channel(list->pipe[1]);
+          break;
+        case 0: /* Child */
+        /* SIGCHLD handling issue: SysV avoids zombies by ignoring SIGCHLD; to emulate
+           such semantics on BSD systems, we need a handler like handle_falling_child() */
+#if defined (IRIX) || (SOLARIS)
+          signal(SIGCHLD, SIG_IGN);
+#else
+          signal(SIGCHLD, ignore_falling_child);
+#endif
+
+#if defined HAVE_MALLOPT
+          mallopt(M_CHECK_ACTION, 0);
+#endif
+
+          /*
+          close(config.sock);
+          close(config.bgp_sock);
+          if (!list->cfg.pipe_amqp) close(list->pipe[1]);
+          */
+          (*dslf->func)(met_ptr);
+          exit(0);
+        default: /* Parent */
+          /*
+          if (!list->cfg.pipe_amqp) {
+            close(list->pipe[0]);
+            setnonblocking(list->pipe[1]);
+          }
+          */
+          break;
+      }
+    }
+    thread_cnt++;
+    dslf = dslf->next;
+  }
+
+  return thread_cnt;
+}
+
+void plugin_buffers_generate_stats(struct metric *met_ptr)
+{
+  struct plugins_list_entry *plugin;
+  struct channels_list_entry *cle = channels_list;
+  struct metric *met_tmp;
+  int index;
+
+  for (index = 0; index < MAX_N_PLUGINS; index++) {
+    plugin = cle[index].plugin;
+    if (plugin == NULL) continue;
+
+    met_tmp = met_ptr;
+    while (met_tmp) {
+      switch (met_tmp->type.id) {
+        case METRICS_INT_PLUGIN_QUEUES_TOT_SZ:
+          met_tmp->int_value += cle->rg.end - cle->rg.base;
+          break;
+        case METRICS_INT_PLUGIN_QUEUES_USED_SZ:
+          met_tmp->int_value += cle->rg.ptr - cle->rg.base;
+          break;
+        case METRICS_INT_PLUGIN_QUEUES_USED_CNT:
+          met_tmp->int_value += 0; //TODO
+          break;
+        case METRICS_INT_PLUGIN_QUEUES_FILL_RATE:
+          met_tmp->int_value += 0; //TODO
+          break;
+        default:
+          break;
+    }
+    met_tmp = met_tmp->next;
+    }
+  }
+}
+
+int init_metrics(struct metric **met_ptr)
+{
+  int met_cnt = 0, met_idx;
+  struct metric *met_tmp, *prev_met = NULL;
+
+  met_tmp = *met_ptr;
+  for(met_idx = 0; strcmp(_metrics_types_matrix[met_idx].label, ""); met_idx++) {
+    if(config.metrics_what_to_count & _metrics_types_matrix[met_idx].id){
+      if (prev_met) {
+        met_tmp = malloc(sizeof(struct metric));
+        if (!met_tmp) {
+          Log(LOG_ERR, "ERROR ( %s/core/STATS ): Unable to allocate enough memory for a new metric structure.\n", config.name);
+          return -1;
+        }
+        memset(met_tmp, 0, sizeof(struct metric));
+      }
+
+      met_tmp->type = _metrics_types_matrix[met_idx];
+      Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): Initializing metric \"%s\"\n", config.name, met_tmp->type.label);
+
+      if (met_ptr == NULL) {
+        met_ptr = &met_tmp;
+        Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): *met_ptr: %p\n", config.name, *met_ptr);
+      }
+      if (prev_met) prev_met->next = met_tmp;
+
+      prev_met = met_tmp;
+      met_cnt++;
+    }
+  }
+
+  return met_cnt;
+}
+
+void reset_metrics_values(struct metric *m)
+{
+  struct metric *m_tmp;
+  m_tmp = m;
+  while(m_tmp) {
+    switch(m_tmp->type.type) {
+      case STATS_TYPE_INT:
+        m->int_value = 0;
+        break;
+      case STATS_TYPE_LONGINT:
+        m->long_value = 0;
+        break;
+      case STATS_TYPE_FLOAT:
+        m->float_value = 0.0;
+        break;
+      case STATS_TYPE_STRING:
+        m->string_value = "";
+        break;
+      default:
+        break;
+    }
+    m_tmp = m_tmp->next;
+  }
+}
+
+int init_statsd_sock() {
+  int sock, slen;
+  int rc, ret, yes=1, no=0, buflen=0;
+  struct host_addr addr;
+#if defined ENABLE_IPV6
+  struct sockaddr_storage server, dest_sockaddr;
+#else
+  struct sockaddr server, dest_sockaddr;
+#endif
+
+  memset(&server, 0, sizeof(server));
+  memset(&dest_sockaddr, 0, sizeof(dest_sockaddr));
+
+  trim_spaces(config.statsd_host);
+  ret = str_to_addr("127.0.0.1", &addr); // TODO store address in config key instead of hardcoding it
+  if (!ret) {
+    Log(LOG_ERR, "ERROR ( %s/%s ): $CONFIG_KEY value is not a valid IPv4/IPv6 address. Terminating.\n", config.name, config.type);
+    exit_all(1);
+  }
+  slen = addr_to_sa((struct sockaddr *)&server, &addr, 8124); // TODO store port in config key instead of hardcoding it
+
+  sock = socket(((struct sockaddr *)&server)->sa_family, SOCK_DGRAM, 0);
+
+  if (sock < 0) {
+    Log(LOG_ERR, "ERROR ( %s/%s ): socket() failed. Terminating.\n", config.name, config.type);
+    exit_all(1);
+  }
+
+  /* bind socket to port */
+  rc = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char *)&yes, sizeof(yes));
+  if (rc < 0) Log(LOG_ERR, "WARN ( %s/%s ): setsockopt() failed for SO_REUSEADDR.\n", config.name, config.type);
+
+#if (defined ENABLE_IPV6) && (defined IPV6_BINDV6ONLY)
+  rc = setsockopt(sock, IPPROTO_IPV6, IPV6_BINDV6ONLY, (char *) &no, (socklen_t) sizeof(no));
+  if (rc < 0) Log(LOG_ERR, "WARN ( %s/%s ): setsockopt() failed for IPV6_BINDV6ONLY.\n", config.name, config.type);
+#endif
+
+  rc = bind(sock, (struct sockaddr *) &server, slen);
+  if (rc < 0) {
+    Log(LOG_ERR, "ERROR ( %s/%s ): bind() to ip=%s port=%d/udp failed (errno: %d).\n", config.name, config.type, config.statsd_host, config.statsd_port, errno);
+    exit(1);
+  }
+  return sock;
+}
+
+int send_data(struct metric *m, int sd) {
+  int dest_addr_len;
+  int ret, buflen=0;
+  char *statsd_type;
+  char data[SRVBUFLEN], databuf[SRVBUFLEN], val_str[SRVBUFLEN];
+  struct host_addr dest_addr;
+#if defined ENABLE_IPV6
+  struct sockaddr_storage server, dest_sockaddr;
+#else
+  struct sockaddr server, dest_sockaddr;
+#endif
+
+  memset(databuf, 0, sizeof(databuf));
+
+  switch(m->type.type) {
+    case STATS_TYPE_INT:
+      sprintf(val_str, "%d", m->int_value);
+      break;
+    case STATS_TYPE_LONGINT:
+      sprintf(val_str, "%ld", m->long_value);
+      break;
+    case STATS_TYPE_FLOAT:
+      sprintf(val_str, "%.2f", m->float_value);
+      break;
+    case STATS_TYPE_STRING:
+      sprintf(val_str, "%s", m->string_value);
+      break;
+  }
+
+  switch(m->type.statsd_fmt) {
+    case STATSD_FMT_COUNTER:
+      statsd_type = "c";
+      break;
+    case STATSD_FMT_GAUGE:
+      statsd_type = "g";
+      break;
+  }
+
+  sprintf(data, "%s:%s|%s", m->type.label, val_str, statsd_type);
+
+  ret = str_to_addr(config.statsd_host, &dest_addr);
+  if (!ret) {
+    Log(LOG_ERR, "ERROR ( %s/%s ): statsd_host value is not a valid IPv4/IPv6 address. Terminating.\n", config.name, config.type);
+    exit_all(1);
+  }
+  dest_addr_len = addr_to_sa((struct sockaddr *)&dest_sockaddr, &dest_addr, config.statsd_port);
+  memcpy(databuf, data, strlen(data));
+  buflen += strlen(data);
+  databuf[buflen] = '\x4'; /* EOT */
+
+  ret = sendto(sd, databuf, buflen, 0, &dest_sockaddr, dest_addr_len);
+  if (ret == -1)
+    Log(LOG_ERR, "ERROR ( %s/%s ): Error sending message :%s\n", config.name, config.type, strerror(errno));
+  else
+    Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): sent data: %s\n", config.name, data);
+
+  return ret;
+}

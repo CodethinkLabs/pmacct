@@ -72,6 +72,7 @@ struct plugin_type_entry {
   int id;
   char string[10];
   void (*func)(int, struct configuration *, void *);
+  void (*stats_func)(int);
 };
 
 struct plugins_list_entry {
