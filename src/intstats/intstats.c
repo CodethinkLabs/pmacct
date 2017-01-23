@@ -400,19 +400,19 @@ void reset_metrics_values(struct metric *m)
 {
   struct metric *m_tmp;
   m_tmp = m;
-  while(m_tmp) {
+  while (m_tmp) {
     switch(m_tmp->type.type) {
       case STATS_TYPE_INT:
-        m->int_value = 0;
+        m_tmp->int_value = 0;
         break;
       case STATS_TYPE_LONGINT:
-        m->long_value = 0;
+        m_tmp->long_value = 0;
         break;
       case STATS_TYPE_FLOAT:
-        m->float_value = 0.0;
+        m_tmp->float_value = 0.0;
         break;
       case STATS_TYPE_STRING:
-        m->string_value = "";
+        m_tmp->string_value = "";
         break;
       default:
         break;
