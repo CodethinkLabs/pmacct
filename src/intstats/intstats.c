@@ -337,12 +337,16 @@ void plugin_buffers_generate_stats(struct metric *met_ptr)
 {
   struct plugins_list_entry *plugin;
   struct channels_list_entry *cle = channels_list;
-  struct metric *met_tmp;
-  int index;
+  struct metric *met_tmp, *fill_rate_met = NULL;
+  int index, tot_sz = 0, used_sz = 0;
 
+  //XXX: could eventually launch a separate thread if more metrics are needed
   for (index = 0; index < MAX_N_PLUGINS; index++) {
     plugin = cle[index].plugin;
     if (plugin == NULL) continue;
+
+    tot_sz += cle->rg.end - cle->rg.base;
+    used_sz += cle->rg.ptr - cle->rg.base;
 
     met_tmp = met_ptr;
     while (met_tmp) {
@@ -354,16 +358,22 @@ void plugin_buffers_generate_stats(struct metric *met_ptr)
           met_tmp->int_value += cle->rg.ptr - cle->rg.base;
           break;
         case METRICS_INT_PLUGIN_QUEUES_USED_CNT:
-          met_tmp->int_value += 0; //TODO
+          //TODO check functional validity
+          met_tmp->int_value += (int) ((cle->rg.ptr - cle->rg.base) / sizeof(struct pkt_data));
           break;
         case METRICS_INT_PLUGIN_QUEUES_FILL_RATE:
-          met_tmp->int_value += 0; //TODO
+          //TODO check functional validity
+          fill_rate_met = met_tmp;
           break;
         default:
           break;
     }
     met_tmp = met_tmp->next;
     }
+  }
+
+  if (fill_rate_met) {
+    fill_rate_met->float_value = (float) (100 * used_sz) / (float) tot_sz;
   }
 }
 
