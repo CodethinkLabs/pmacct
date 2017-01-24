@@ -101,9 +101,14 @@ void intstats_daemon(void *t_data_void)
   int sock, nb_children, nb_term;
   int counter = 0, test; // TEST
 
-  met = malloc(sizeof(struct metric));
-  if (!met) {
-    Log(LOG_ERR, "ERROR ( %s/core/STATS ): Unable to allocate enough memory for a new metric structure.\n", config.name);
+  /* The first metric should not need to be on a shared memory area since metrics are
+   * initialised following an array which first element represents a metric that is currently
+   * computed in this thread. However, this is done so to maintain consistency with other metrics
+   * structures and avoid side effects in case plugin_buffers_generate_stats() eventually creates
+   * its own thread(s). */
+  met = map_shared(0, sizeof(struct metric), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+  if (met == MAP_FAILED) {
+    Log(LOG_ERR, "ERROR ( %s/core/STATS ): unable to allocate metric structure. Exiting ...\n", config.name);
     exit(1);
   }
 
@@ -371,10 +376,10 @@ int init_metrics(struct metric **met_ptr)
   for(met_idx = 0; strcmp(_metrics_types_matrix[met_idx].label, ""); met_idx++) {
     if(config.metrics_what_to_count & _metrics_types_matrix[met_idx].id){
       if (prev_met) {
-        met_tmp = malloc(sizeof(struct metric));
-        if (!met_tmp) {
-          Log(LOG_ERR, "ERROR ( %s/core/STATS ): Unable to allocate enough memory for a new metric structure.\n", config.name);
-          return -1;
+        met_tmp = map_shared(0, sizeof(struct metric), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+        if (met_tmp == MAP_FAILED) {
+          Log(LOG_ERR, "ERROR ( %s/core/STATS ): unable to allocate metric structure. Exiting ...\n", config.name);
+	  exit(1);
         }
         memset(met_tmp, 0, sizeof(struct metric));
       }
