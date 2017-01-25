@@ -32,7 +32,6 @@
 #define PLUGIN_ID_MONGODB	9
 #define PLUGIN_ID_AMQP		10
 #define PLUGIN_ID_KAFKA		11
-#define PLUGIN_ID_STATSD	12
 #define PLUGIN_ID_UNKNOWN       -1
 
 /* vars */
@@ -867,7 +866,6 @@ static struct plugin_type_entry plugin_types_list[] = {
   {PLUGIN_ID_KAFKA,     "kafka",        kafka_plugin,   NULL},
 #endif
   {PLUGIN_ID_TEE,	"tee",		tee_plugin,     NULL},
-  {PLUGIN_ID_STATSD,	"statsd",	statsd_plugin,  NULL},
   {PLUGIN_ID_UNKNOWN,	"",		NULL,           NULL},
 };
 #endif
