@@ -26,7 +26,6 @@
 #include "pmacct.h"
 #include "addr.h"
 #include "thread_pool.h"
-#include "intstats.h"
 #include "pmacct-data.h"
 #include "plugin_hooks.h"
 
@@ -257,7 +256,7 @@ int launch_plugins_daemons(struct metric *met_ptr)
               /* TODO find a way to communicate metrics (→ before computation and ← once computed)
                * without the plugin stats_func needing met_ptr as a parameter
                * (plugin_hooks.h shouldn't need to know about internal stats structures */
-              (*list->type.stats_func)(0);
+              (*list->type.stats_func)(met_ptr);
               exit(0);
             default: /* Parent */
               /*

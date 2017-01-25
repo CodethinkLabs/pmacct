@@ -39,7 +39,6 @@
 #include "bmp/bmp.h"
 #include "nfv8_handlers.h"
 #include "telemetry/telemetry.h"
-#include "intstats/intstats.h"
 
 /* variables to be exported away */
 struct channels_list_entry channels_list[MAX_N_PLUGINS]; /* communication channels: core <-> plugins */

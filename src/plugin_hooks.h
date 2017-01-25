@@ -23,6 +23,8 @@
 #include "plugin_common.h"
 #undef  __PLUGIN_COMMON_EXPORT
 
+#include "intstats/intstats.h"
+
 #define DEFAULT_CHBUFLEN 4096
 #define DEFAULT_PIPE_SIZE 65535
 #define DEFAULT_PLOAD_SIZE 256 
@@ -72,7 +74,7 @@ struct plugin_type_entry {
   int id;
   char string[10];
   void (*func)(int, struct configuration *, void *);
-  void (*stats_func)(int);
+  void (*stats_func)(struct metric *);
 };
 
 struct plugins_list_entry {
