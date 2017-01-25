@@ -123,6 +123,8 @@ void intstats_daemon(void *t_data_void)
   sock = init_statsd_sock();
   Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): socket initialized\n", config.name);
 
+  if (!config.statsd_refresh_time) config.statsd_refresh_time = STATS_REFRESH_TIME_DEFAULT;
+
   //XXX: this periodicity implementation assumes stats collection and sending combined are shorter than configured period
   Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): CONFIGURED REFRESH TIME: %d\n", config.name, config.statsd_refresh_time);
   while (1) {
