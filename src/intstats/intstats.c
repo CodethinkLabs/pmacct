@@ -214,7 +214,6 @@ int launch_plugins_daemons(struct metric *met_ptr)
   int pid, ret, index = 0, thread_cnt = 0;
   struct plugins_list_entry *list = plugins_list;
   struct stats_channel_entry *chptr;
-  unsigned char stats_data[STATS_MSG_SIZE];
 
   /* Create communication channels for each plugin for which
    * stats are required */
@@ -448,13 +447,36 @@ int init_statsd_sock() {
   memset(&server, 0, sizeof(server));
   memset(&dest_sockaddr, 0, sizeof(dest_sockaddr));
 
-  trim_spaces(config.statsd_host);
-  ret = str_to_addr("127.0.0.1", &addr); // TODO store address in config key instead of hardcoding it
-  if (!ret) {
-    Log(LOG_ERR, "ERROR ( %s/%s ): $CONFIG_KEY value is not a valid IPv4/IPv6 address. Terminating.\n", config.name, config.type);
-    exit_all(1);
+  /* If no IP address is supplied, let's set our default
+     behaviour: IPv4 address, INADDR_ANY, port 2100 */
+  if (!config.intstats_src_port) config.intstats_src_port = STATS_SRC_PORT_DEFAULT;
+#if (defined ENABLE_IPV6)
+  if (!config.intstats_src_ip) {
+    struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)&server;
+
+    sa6->sin6_family = AF_INET6;
+    sa6->sin6_port = htons(config.intstats_src_port);
+    slen = sizeof(struct sockaddr_in6);
   }
-  slen = addr_to_sa((struct sockaddr *)&server, &addr, 8124); // TODO store port in config key instead of hardcoding it
+#else
+  if (!config.intstats_src_ip) {
+    struct sockaddr_in *sa4 = (struct sockaddr_in *)&server;
+
+    sa4->sin_family = AF_INET;
+    sa4->sin_addr.s_addr = htonl(0);
+    sa4->sin_port = htons(config.intstats_src_port);
+    slen = sizeof(struct sockaddr_in);
+  }
+#endif
+  else {
+    trim_spaces(config.intstats_src_ip);
+    ret = str_to_addr(config.intstats_src_ip, &addr);
+    if (!ret) {
+      Log(LOG_ERR, "ERROR ( %s/core ): 'intstats_src_ip' value is not valid. Exiting.\n", config.name);
+      exit(1);
+    }
+    slen = addr_to_sa((struct sockaddr *)&server, &addr, config.intstats_src_port);
+  }
 
   sock = socket(((struct sockaddr *)&server)->sa_family, SOCK_DGRAM, 0);
 
@@ -474,7 +496,7 @@ int init_statsd_sock() {
 
   rc = bind(sock, (struct sockaddr *) &server, slen);
   if (rc < 0) {
-    Log(LOG_ERR, "ERROR ( %s/%s ): bind() to ip=%s port=%d/udp failed (errno: %d).\n", config.name, config.type, config.statsd_host, config.statsd_port, errno);
+    Log(LOG_ERR, "ERROR ( %s/%s ): bind() to ip=%s port=%d/udp failed (errno: %d).\n", config.name, config.type, config.intstats_src_ip, config.intstats_src_port, errno);
     exit(1);
   }
   return sock;

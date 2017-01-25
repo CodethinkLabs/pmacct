@@ -438,6 +438,8 @@ EXT int cfg_key_tmp_net_own_field(char *, char *, char *);
 EXT int cfg_key_tmp_asa_bi_flow(char *, char *, char *);
 EXT int cfg_key_tmp_comms_same_field(char *, char *, char *);
 EXT int cfg_key_intstats_daemon(char *, char *, char *);
+EXT int cfg_key_intstats_src_ip(char *, char *, char *);
+EXT int cfg_key_intstats_src_port(char *, char *, char *);
 EXT int cfg_key_metrics(char *, char *, char *);
 
 EXT void parse_time(char *, char *, int *, int *);

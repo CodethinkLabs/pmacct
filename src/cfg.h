@@ -532,6 +532,8 @@ struct configuration {
   int tmp_asa_bi_flow;
   int tmp_comms_same_field;
   int intstats_daemon;
+  char *intstats_src_ip;
+  int intstats_src_port;
   size_t thread_stack;
 };
 

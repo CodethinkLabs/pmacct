@@ -21,7 +21,7 @@
 
 /* defines */
 #define STATS_REFRESH_TIME_DEFAULT  60
-#define STATS_MSG_SIZE              255
+#define STATS_SRC_PORT_DEFAULT      8124
 
 #define STATS_TYPE_INT              0
 #define STATS_TYPE_LONGINT          1

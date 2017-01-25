@@ -838,6 +838,8 @@ static const struct _dictionary_line dictionary[] = {
   {"tmp_comms_same_field", cfg_key_tmp_comms_same_field},
   {"metric", cfg_key_metrics},
   {"intstats_daemon", cfg_key_intstats_daemon},
+  {"intstats_src_ip", cfg_key_intstats_src_ip},
+  {"intstats_src_port", cfg_key_intstats_src_port},
   {"", NULL},
 };
 

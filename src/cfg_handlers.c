@@ -7497,3 +7497,31 @@ int cfg_key_intstats_daemon(char *filename, char *name, char *value_ptr)
 
   return changes;
 }
+
+int cfg_key_intstats_src_port(char *filename, char *name, char *value_ptr)
+{
+  struct plugins_list_entry *list = plugins_list;
+  int value, changes = 0;
+
+  value = atoi(value_ptr);
+  if ((value <= 0) || (value > 65535)) {
+    Log(LOG_ERR, "WARN: [%s] 'intstats_src_port' has to be in the range 0-65535.\n", filename);
+    return ERR;
+  }
+
+  for (; list; list = list->next, changes++) list->cfg.intstats_src_port = value;
+  if (name) Log(LOG_WARNING, "WARN: [%s] plugin name not supported for key 'intstats_src_port'. Globalized.\n", filename);
+
+  return changes;
+}
+
+int cfg_key_intstats_src_ip(char *filename, char *name, char *value_ptr)
+{
+  struct plugins_list_entry *list = plugins_list;
+  int changes = 0;
+
+  for (; list; list = list->next, changes++) list->cfg.intstats_src_ip = value_ptr;
+  if (name) Log(LOG_WARNING, "WARN: [%s] plugin name not supported for key 'intstats_src_ip'. Globalized.\n", filename);
+
+  return changes;
+}
