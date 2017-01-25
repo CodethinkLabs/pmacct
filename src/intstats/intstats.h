@@ -31,6 +31,7 @@
 #define STATSD_FMT_COUNTER    0
 #define STATSD_FMT_GAUGE      1
 #define STATSD_FMT_SAMPLING   2
+#define STATSD_FMT_TIMING     3
 
 struct intstats_data {
   int is_thread;
@@ -79,6 +80,10 @@ static const struct metric_type _metrics_types_matrix[] = {
  { "nfacctd_udp_tx_queue", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_NFACCTD_UDP_TX_QUEUE},
  { "nfacctd_udp_rx_queue", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_NFACCTD_UDP_RX_QUEUE},
  { "nfacctd_udp_drop_count", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_NFACCTD_UDP_DROP_CNT},
+ { "kafka_flush_count", STATS_TYPE_INT, STATSD_FMT_GAUGE, METRICS_INT_KAFKA_FLUSH_CNT},
+ { "kafka_flush_msg_sent", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_KAFKA_FLUSH_MSG_SENT},
+ { "kafka_flush_msg_err", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_KAFKA_FLUSH_MSG_ERR},
+ { "kafka_flush_time", STATS_TYPE_FLOAT, STATSD_FMT_TIMING, METRICS_INT_KAFKA_FLUSH_TIME},
  { "", -1, -1, -1}
 };
 

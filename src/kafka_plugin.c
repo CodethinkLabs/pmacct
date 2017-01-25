@@ -704,3 +704,24 @@ void kafka_avro_schema_purge()
   if (avro_buf) free(avro_buf);
 }
 #endif
+
+void kafka_generate_stats(struct metric * met)
+{
+  while (met) {
+    switch (met->type.id) {
+      case METRICS_INT_KAFKA_FLUSH_CNT:
+        //TODO
+        break;
+      case METRICS_INT_KAFKA_FLUSH_MSG_SENT:
+        //TODO
+        break;
+      case METRICS_INT_KAFKA_FLUSH_MSG_ERR:
+        //TODO
+        break;
+      case METRICS_INT_KAFKA_FLUSH_TIME:
+        //TODO
+        break;
+    }
+    met = met->next;
+  }
+}

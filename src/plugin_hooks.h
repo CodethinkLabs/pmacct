@@ -234,5 +234,6 @@ EXT void amqp_plugin(int, struct configuration *, void *);
 
 #ifdef WITH_KAFKA
 EXT void kafka_plugin(int, struct configuration *, void *);
+EXT void kafka_generate_stats(struct metric *);
 #endif
 #undef EXT

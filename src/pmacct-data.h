@@ -863,7 +863,7 @@ static struct plugin_type_entry plugin_types_list[] = {
   {PLUGIN_ID_AMQP,	"amqp",		amqp_plugin,    NULL},
 #endif
 #ifdef WITH_KAFKA
-  {PLUGIN_ID_KAFKA,     "kafka",        kafka_plugin,   NULL},
+  {PLUGIN_ID_KAFKA,     "kafka",        kafka_plugin,   kafka_generate_stats},
 #endif
   {PLUGIN_ID_TEE,	"tee",		tee_plugin,     NULL},
   {PLUGIN_ID_UNKNOWN,	"",		NULL,           NULL},
