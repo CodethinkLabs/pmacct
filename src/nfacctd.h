@@ -398,6 +398,12 @@ struct data_hdr_v9 {
   u_int16_t flow_len;
 };
 
+struct nfacctd_metrics {
+  int rcv_pkt;
+  int udp_drop_cnt;
+  int udp_rcv_buf;
+};
+
 /* defines */
 #define DEFAULT_NFACCTD_PORT 2100
 #define NETFLOW_MSG_SIZE PKT_MSG_SIZE
@@ -783,6 +789,8 @@ EXT char *nfv9_check_status(struct packet_ptrs *, u_int32_t, u_int32_t, u_int32_
 
 EXT struct template_cache tpl_cache;
 EXT struct v8_handler_entry v8_handlers[15];
+
+EXT struct nfacctd_metrics nf_metrics;
 
 EXT struct host_addr debug_a;
 EXT u_char debug_agent_addr[50];
