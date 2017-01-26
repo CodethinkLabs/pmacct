@@ -45,6 +45,11 @@ void intstats_wrapper(const struct channels_list_entry *chan_list, void (*func)(
   struct intstats_data *t_data;
   struct daemon_stats_linked_func *dslf = NULL, *prev_dslf = NULL;
 
+  if (!config.metrics_what_to_count) {
+    Log(LOG_WARNING, "WARN ( %s/core/STATS ): No metric set. Check your configuration.\n", config.name);
+    return;
+  }
+
   /* initialize threads pool */
   intstats_pool = allocate_thread_pool(1);
   assert(intstats_pool);
