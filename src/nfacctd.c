@@ -39,6 +39,7 @@
 #include "bmp/bmp.h"
 #include "nfv8_handlers.h"
 #include "telemetry/telemetry.h"
+#include "intstats/intstats.h"
 
 /* variables to be exported away */
 struct channels_list_entry channels_list[MAX_N_PLUGINS]; /* communication channels: core <-> plugins */
@@ -84,10 +85,11 @@ void usage_daemon(char *prog_name)
   printf("For suggestions, critics, bugs, contact me: %s.\n", MANTAINER);
 }
 
-void nfacctd_generate_stats(struct metric *met)
+void nfacctd_generate_stats(void *ptr)
 {
   int val, tpl_idx;
   unsigned char buf[SRVBUFLEN];
+  struct metric *met = (struct metric *)ptr;
 
   while (met) {
     switch (met->type.id) {

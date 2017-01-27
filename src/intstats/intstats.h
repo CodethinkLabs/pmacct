@@ -33,6 +33,8 @@
 #define STATSD_FMT_SAMPLING   2
 #define STATSD_FMT_TIMING     3
 
+#define STATS_LABEL_LEN	     128
+
 struct intstats_data {
   int is_thread;
   char *log_str;
@@ -48,15 +50,16 @@ struct stats_channel_entry {
 };
 
 struct daemon_stats_linked_func {
-  void (*func) (struct metric *);
+  void (*func) (void *);
   struct daemon_stats_linked_func *next;
 };
 
 struct metric_type {
-  char *label;
+  char label[STATS_LABEL_LEN];
   int type;
   int statsd_fmt; /* counter, gauge, etc */
   u_int64_t id;
+  int plugin_id;
 };
 
 struct metric {
@@ -71,20 +74,20 @@ struct metric {
 };
 
 static const struct metric_type _metrics_types_matrix[] = {
- { "plugin_queues_total_size", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_PLUGIN_QUEUES_TOT_SZ},
- { "plugin_queues_used_size", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_PLUGIN_QUEUES_USED_SZ},
- { "plugin_queues_used_count", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_PLUGIN_QUEUES_USED_CNT},
- { "plugin_queues_fill_rate", STATS_TYPE_FLOAT, STATSD_FMT_GAUGE, METRICS_INT_PLUGIN_QUEUES_FILL_RATE},
- { "nfacctd_received_packets", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_NFACCTD_RCV_PKT},
- { "nfacctd_templates_count", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_NFACCTD_TPL_CNT},
- { "nfacctd_udp_tx_queue", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_NFACCTD_UDP_TX_QUEUE},
- { "nfacctd_udp_rx_queue", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_NFACCTD_UDP_RX_QUEUE},
- { "nfacctd_udp_drop_count", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_NFACCTD_UDP_DROP_CNT},
- { "kafka_flush_count", STATS_TYPE_INT, STATSD_FMT_GAUGE, METRICS_INT_KAFKA_FLUSH_CNT},
- { "kafka_flush_msg_sent", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_KAFKA_FLUSH_MSG_SENT},
- { "kafka_flush_msg_err", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_KAFKA_FLUSH_MSG_ERR},
- { "kafka_flush_time", STATS_TYPE_FLOAT, STATSD_FMT_TIMING, METRICS_INT_KAFKA_FLUSH_TIME},
- { "", -1, -1, -1}
+ { "plugin_queues_total_size", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_PLUGIN_QUEUES_TOT_SZ, PLUGIN_ID_CORE},
+ { "plugin_queues_used_size", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_PLUGIN_QUEUES_USED_SZ, PLUGIN_ID_CORE},
+ { "plugin_queues_used_count", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_PLUGIN_QUEUES_USED_CNT, PLUGIN_ID_CORE},
+ { "plugin_queues_fill_rate", STATS_TYPE_FLOAT, STATSD_FMT_GAUGE, METRICS_INT_PLUGIN_QUEUES_FILL_RATE, PLUGIN_ID_CORE},
+ { "nfacctd_received_packets", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_NFACCTD_RCV_PKT, PLUGIN_ID_CORE},
+ { "nfacctd_templates_count", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_NFACCTD_TPL_CNT, PLUGIN_ID_CORE},
+ { "nfacctd_udp_tx_queue", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_NFACCTD_UDP_TX_QUEUE, PLUGIN_ID_CORE},
+ { "nfacctd_udp_rx_queue", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_NFACCTD_UDP_RX_QUEUE, PLUGIN_ID_CORE},
+ { "nfacctd_udp_drop_count", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_NFACCTD_UDP_DROP_CNT, PLUGIN_ID_CORE},
+ { "kafka_flush_count", STATS_TYPE_INT, STATSD_FMT_GAUGE, METRICS_INT_KAFKA_FLUSH_CNT, PLUGIN_ID_KAFKA},
+ { "kafka_flush_msg_sent", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_KAFKA_FLUSH_MSG_SENT, PLUGIN_ID_KAFKA},
+ { "kafka_flush_msg_err", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_KAFKA_FLUSH_MSG_ERR, PLUGIN_ID_KAFKA},
+ { "kafka_flush_time", STATS_TYPE_FLOAT, STATSD_FMT_TIMING, METRICS_INT_KAFKA_FLUSH_TIME, PLUGIN_ID_KAFKA},
+ { "", -1, -1, -1, PLUGIN_ID_UNKNOWN}
 };
 
 /*
@@ -104,4 +107,6 @@ struct daemon_channels_list {
 EXT void intstats_wrapper();
 EXT void intstats_daemon(void *);
 EXT void intstats_prepare_thread(struct intstats_data *);
+
+EXT struct metric *met;
 #undef EXT

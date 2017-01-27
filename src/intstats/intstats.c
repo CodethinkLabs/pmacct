@@ -28,6 +28,7 @@
 #include "thread_pool.h"
 #include "pmacct-data.h"
 #include "plugin_hooks.h"
+#include "intstats.h"
 
 /* variables to be exported away */
 thread_pool_t *intstats_pool;
@@ -99,7 +100,7 @@ void intstats_prepare_thread(struct intstats_data *t_data)
 
 void intstats_daemon(void *t_data_void)
 {
-  struct metric *met, *met_tmp = NULL;
+  struct metric *met_tmp = NULL;
   time_t start, end;
   sighandler_t prev_sig;
   int sock, nb_children, nb_term;
@@ -220,65 +221,31 @@ int launch_plugins_daemons(struct metric *met_ptr)
 {
   int pid, ret, index = 0, thread_cnt = 0;
   struct plugins_list_entry *list = plugins_list;
-  struct stats_channel_entry *chptr;
-
-  /* Create communication channels for each plugin for which
-   * stats are required */
 
   while (list) {
-    /* internal stats have to be explicitly enabled by plugin in the config */
-     printf("does %s:%s have a stats function? %s\n", list->name, list->type.string, list->type.stats_func? "YES" : "NO");
     if (list->cfg.intstats_daemon && list->type.stats_func) {
-     printf("Launching plugin thread for %s:%s\n", list->name, list->type.string);
-
-     //TODO check: are 2 nested loops over plugins really necessary here?
-      while (index < MAX_N_PLUGINS) {
-        chptr = &stats_channels_list[index];
-        if (!chptr->used) {
-          socketpair(AF_UNIX, SOCK_DGRAM, 0, chptr->pipe);
-          switch (pid = fork()) {
-            case -1: /* Something went wrong */
-              Log(LOG_WARNING, "WARN ( %s/%s ): Unable to initialize stats generation in: %s\n", list->name, list->type.string, strerror(errno));
-              //delete_pipe_channel(list->pipe[1]);
-              break;
-            case 0: /* Child */
-            /* SIGCHLD handling issue: SysV avoids zombies by ignoring SIGCHLD; to emulate
-               such semantics on BSD systems, we need a handler like handle_falling_child() */
+      switch (pid = fork()) {
+        case -1: /* Something went wrong */
+          Log(LOG_WARNING, "WARN ( %s/%s ): Unable to initialize stats generation in: %s\n", list->name, list->type.string, strerror(errno));
+          break;
+        case 0: /* Child */
+        /* SIGCHLD handling issue: SysV avoids zombies by ignoring SIGCHLD; to emulate
+           such semantics on BSD systems, we need a handler like handle_falling_child() */
 #if defined (IRIX) || (SOLARIS)
-              signal(SIGCHLD, SIG_IGN);
+          signal(SIGCHLD, SIG_IGN);
 #else
-              signal(SIGCHLD, ignore_falling_child);
+          signal(SIGCHLD, ignore_falling_child);
 #endif
 
 #if defined HAVE_MALLOPT
-              mallopt(M_CHECK_ACTION, 0);
+          mallopt(M_CHECK_ACTION, 0);
 #endif
 
-              /*
-              close(config.sock);
-              close(config.bgp_sock);
-              if (!list->cfg.pipe_amqp) close(list->pipe[1]);
-              */
-              /* TODO find a way to communicate metrics (→ before computation and ← once computed)
-               * without the plugin stats_func needing met_ptr as a parameter
-               * (plugin_hooks.h shouldn't need to know about internal stats structures */
-              (*list->type.stats_func)(met_ptr);
-              exit(0);
-            default: /* Parent */
-              /*
-              if (!list->cfg.pipe_amqp) {
-                close(list->pipe[0]);
-                setnonblocking(list->pipe[1]);
-              }
-              */
-              break;
-          }
-
-          chptr->plugin = list;
-          chptr->used = 1;
+          (*list->type.stats_func)(met_ptr, list->cfg.name);
+          exit(0);
+        default: /* Parent */
+          thread_cnt++;
           break;
-        }
-        index++;
       }
     }
     list = list->next;
@@ -386,31 +353,49 @@ int init_metrics(struct metric **met_ptr)
 {
   int met_cnt = 0, met_idx;
   struct metric *met_tmp, *prev_met = NULL;
+  struct plugins_list_entry *list = plugins_list;
 
   met_tmp = *met_ptr;
-  for(met_idx = 0; strcmp(_metrics_types_matrix[met_idx].label, ""); met_idx++) {
-    if(config.metrics_what_to_count & _metrics_types_matrix[met_idx].id){
-      if (prev_met) {
-        met_tmp = map_shared(0, sizeof(struct metric), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-        if (met_tmp == MAP_FAILED) {
-          Log(LOG_ERR, "ERROR ( %s/core/STATS ): unable to allocate metric structure. Exiting ...\n", config.name);
-	  exit(1);
+  while (list) {
+    for(met_idx = 0; strcmp(_metrics_types_matrix[met_idx].label, ""); met_idx++) {
+
+      if(list->cfg.metrics_what_to_count & _metrics_types_matrix[met_idx].id
+          && (list->type.id == _metrics_types_matrix[met_idx].plugin_id)) {
+
+        if (prev_met) {
+          met_tmp = map_shared(0, sizeof(struct metric), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+          if (met_tmp == MAP_FAILED) {
+            Log(LOG_ERR, "ERROR ( %s/%s/STATS ): unable to allocate metric structure. Exiting ...\n", list->cfg.name, list->type.string);
+            exit(1);
+          }
+          memset(met_tmp, 0, sizeof(struct metric));
         }
-        memset(met_tmp, 0, sizeof(struct metric));
+
+        met_tmp->type = _metrics_types_matrix[met_idx];
+
+        /* Prefix metric label with possible plugin name, truncated if needed
+         * (NB: some characters (brackets, etc) are ignored by statsD, resulting in ugly names) */
+        if (list->cfg.name) {
+          char lbl[STATS_LABEL_LEN];
+
+          memset(lbl, 0, STATS_LABEL_LEN);
+          strncat(lbl, list->cfg.name, STATS_LABEL_LEN - 1);
+          strcat(lbl, "-");
+          strncat(lbl, met_tmp->type.label, STATS_LABEL_LEN - strlen(lbl) - 1);
+          strncpy(met_tmp->type.label, lbl, STATS_LABEL_LEN - 1);
+        }
+
+        Log(LOG_DEBUG, "DEBUG ( %s/%s/STATS ): Initializing metric \"%s\"\n", list->cfg.name, list->type.string, met_tmp->type.label);
+
+        if (met_ptr == NULL) met_ptr = &met_tmp;
+
+        if (prev_met) prev_met->next = met_tmp;
+
+        prev_met = met_tmp;
+        met_cnt++;
       }
-
-      met_tmp->type = _metrics_types_matrix[met_idx];
-      Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): Initializing metric \"%s\"\n", config.name, met_tmp->type.label);
-
-      if (met_ptr == NULL) {
-        met_ptr = &met_tmp;
-        Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): *met_ptr: %p\n", config.name, *met_ptr);
-      }
-      if (prev_met) prev_met->next = met_tmp;
-
-      prev_met = met_tmp;
-      met_cnt++;
     }
+    list = list->next;
   }
 
   return met_cnt;

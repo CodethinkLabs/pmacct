@@ -27,6 +27,7 @@
 #include "plugin_hooks.h"
 #include "plugin_common.h"
 #include "kafka_plugin.h"
+#include "intstats/intstats.h"
 #ifndef WITH_JANSSON
 #error "--enable-kafka requires --enable-jansson"
 #endif
@@ -705,22 +706,25 @@ void kafka_avro_schema_purge()
 }
 #endif
 
-void kafka_generate_stats(struct metric * met)
+void kafka_generate_stats(void *ptr, char *cfg_name)
 {
+  struct metric *met = (struct metric *)ptr;
   while (met) {
-    switch (met->type.id) {
-      case METRICS_INT_KAFKA_FLUSH_CNT:
-        //TODO
-        break;
-      case METRICS_INT_KAFKA_FLUSH_MSG_SENT:
-        //TODO
-        break;
-      case METRICS_INT_KAFKA_FLUSH_MSG_ERR:
-        //TODO
-        break;
-      case METRICS_INT_KAFKA_FLUSH_TIME:
-        //TODO
-        break;
+    if (cfg_name && strstr(met->type.label, cfg_name) == met->type.label) {
+      switch (met->type.id) {
+        case METRICS_INT_KAFKA_FLUSH_CNT:
+          //TODO
+          break;
+        case METRICS_INT_KAFKA_FLUSH_MSG_SENT:
+          //TODO
+          break;
+        case METRICS_INT_KAFKA_FLUSH_MSG_ERR:
+          //TODO
+          break;
+        case METRICS_INT_KAFKA_FLUSH_TIME:
+          //TODO
+          break;
+      }
     }
     met = met->next;
   }
