@@ -35,6 +35,7 @@ thread_pool_t *intstats_pool;
 struct stats_channel_entry stats_channels_list[MAX_N_PLUGINS]; /* stats communication channels: core <-> plugins */
 struct channels_list_entry *channels_list; // TODO make it usable for several daemons
 struct daemon_stats_linked_func *daemon_stats_funcs = NULL; /* pointer to first daemon stats generation function */
+struct active_thread *at;
 
 //TODO: note: stats will only work for one daemon at a time in the current config
 // if several daemons have config enabled, each wrapper will trigger config for its daemon and
@@ -147,12 +148,16 @@ void intstats_daemon(void *t_data_void)
 
     plugin_buffers_generate_stats(met);
 
-    //print_metrics(met);
+    int term_pid = -1;
+    while ((term_pid = waitpid(-1, NULL, WUNTRACED)) > 0) {
+      /* Terminated thread is deleted from the list only if it is one
+       * of the threads that were being waited for */
+      if (delete_active_thread(term_pid)) nb_term++;
+      printf("Just terminated process ID: %d\n", term_pid);
+      printf("nb_term: %d , nb_children: %d\n", nb_term, nb_children);
+      print_active_threads(); // TEST
 
-    while (wait(NULL) > 0) {
-      nb_term++;
-      Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): thread %d/%d has terminated. \n", config.name, nb_term, nb_children);
-      if (nb_term == nb_children) break;
+      if (!at || !check_active_threads()) break;
     }
 
     met_tmp = met;
@@ -244,6 +249,8 @@ int launch_plugins_daemons(struct metric *met_ptr)
           (*list->type.stats_func)(met_ptr, list->cfg.name);
           exit(0);
         default: /* Parent */
+          insert_active_thread(pid);
+          printf("Kafka: Just started process ID: %d\n", pid); //TEST
           thread_cnt++;
           break;
       }
@@ -257,6 +264,7 @@ int launch_core_daemons(struct metric *met_ptr)
 {
   struct plugins_list_entry *list = plugins_list;
   struct daemon_stats_linked_func *dslf;
+  struct active_thread *at_tmp;
   int pid, status, thread_cnt = 0;
 
   dslf = daemon_stats_funcs;
@@ -289,12 +297,9 @@ int launch_core_daemons(struct metric *met_ptr)
           (*dslf->func)(met_ptr);
           exit(0);
         default: /* Parent */
-          /*
-          if (!list->cfg.pipe_amqp) {
-            close(list->pipe[0]);
-            setnonblocking(list->pipe[1]);
-          }
-          */
+          insert_active_thread(pid);
+          printf("Core: Just started process ID: %d\n", pid); //TEST
+          thread_cnt++;
           break;
       }
     }
@@ -551,4 +556,72 @@ int send_data(struct metric *m, int sd) {
     Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): sent data: %s\n", config.name, data);
 
   return ret;
+}
+
+void insert_active_thread(int pid) {
+  struct active_thread *at_tmp;
+
+  if (!at) {
+    at = malloc(sizeof(struct active_thread));
+    memset(at, 0, sizeof(struct active_thread));
+    at->pid = pid;
+  }
+  else {
+    at_tmp = malloc(sizeof(struct active_thread));
+    memset(at_tmp, 0, sizeof(struct active_thread));
+    at_tmp->pid = pid;
+    at_tmp->next = at;
+    at = at_tmp;
+  }
+}
+
+int delete_active_thread(int pid) {
+  struct active_thread *at_tmp, *at_del, *at_prev = NULL;
+  int ret = 0;
+
+  at_tmp = at;
+  while (at_tmp) {
+      if (at_tmp->pid == pid) {
+        at_del = at_tmp;
+        if (!at_prev) {
+          at = at_tmp->next;
+        }
+        else {
+          at_prev->next = at_tmp->next;
+        }
+        free(at_tmp);
+        ret++;
+        break;
+      }
+      at_prev = at_tmp;
+      at_tmp = at_tmp->next;
+  }
+  return ret;
+}
+
+int check_active_threads() {
+  struct active_thread *at_tmp;
+  int nb_threads = 0;
+
+  at_tmp = at;
+  while (at_tmp) {
+    nb_threads++;
+    if (kill(at_tmp->pid, 0) == -1) {
+      int pid = at_tmp->pid;
+      delete_active_thread(at_tmp->pid);
+      printf("Deleted non-existent thread %d\n", pid);
+      nb_threads--;
+    }
+    at_tmp = at_tmp->next;
+  }
+  return nb_threads; /* remaining active threads */
+}
+
+void print_active_threads() {
+  //XXX: Test function. Can be safely deleted once internal stats are stable
+    struct active_thread *at_tmp = at;
+    while(at_tmp) {
+        printf("Active thread pid: %d\n", at_tmp->pid);
+        at_tmp = at_tmp->next;
+    }
 }

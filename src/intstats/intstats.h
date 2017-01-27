@@ -73,6 +73,11 @@ struct metric {
   struct metric *next;
 };
 
+struct active_thread {
+  int pid;
+  struct active_thread *next;
+};
+
 static const struct metric_type _metrics_types_matrix[] = {
  { "plugin_queues_total_size", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_PLUGIN_QUEUES_TOT_SZ, PLUGIN_ID_CORE},
  { "plugin_queues_used_size", STATS_TYPE_INT, STATSD_FMT_COUNTER, METRICS_INT_PLUGIN_QUEUES_USED_SZ, PLUGIN_ID_CORE},
