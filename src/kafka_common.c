@@ -147,7 +147,7 @@ int p_kafka_get_partition(struct p_kafka_host *kafka_host)
 
 void p_kafka_set_dynamic_partitioner(struct p_kafka_host *kafka_host)
 {
-  rd_kafka_topic_conf_set_partitioner_cb(kafka_host->topic_cfg, &rd_kafka_msg_partitioner_consistent_random);
+  rd_kafka_topic_conf_set_partitioner_cb(kafka_host->topic_cfg, &rd_kafka_msg_partitioner_consistent);
 }
 
 void p_kafka_set_key(struct p_kafka_host *kafka_host, char *key, int key_len)
