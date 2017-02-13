@@ -72,7 +72,7 @@ struct plugin_type_entry {
   int id;
   char string[10];
   void (*func)(int, struct configuration *, void *);
-  void (*stats_func)(void *, char *);
+  void * (*stats_func)(void *);
 };
 
 struct plugins_list_entry {
@@ -232,6 +232,6 @@ EXT void amqp_plugin(int, struct configuration *, void *);
 
 #ifdef WITH_KAFKA
 EXT void kafka_plugin(int, struct configuration *, void *);
-EXT void kafka_generate_stats(void *, char *);
+EXT void *kafka_generate_stats(void *);
 #endif
 #undef EXT

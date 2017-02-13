@@ -38,7 +38,7 @@ EXT void kafka_cache_purge(struct chained_cache *[], int);
 #ifdef WITH_AVRO
 EXT void kafka_avro_schema_purge();
 #endif
-EXT void kafka_generate_stats(void *, char *);
+EXT void *kafka_generate_stats(void *);
 
 /* global vars */
 EXT void (*insert_func)(struct primitives_ptrs *, struct insert_data *); /* pointer to INSERT function */

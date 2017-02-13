@@ -706,26 +706,21 @@ void kafka_avro_schema_purge()
 }
 #endif
 
-void kafka_generate_stats(void *ptr, char *cfg_name)
+void *kafka_generate_stats(void *cfg)
 {
-  struct metric *met = (struct metric *)ptr;
+  struct metric *met = ((struct configuration *)cfg)->met;
+
+  /*
+  //XXX: future metrics can be added here if they don't need event-related increments
   while (met) {
-    if (cfg_name && strstr(met->type.label, cfg_name) == met->type.label) {
+    if (cfg->name && strstr(met->type.label, cfg->name) == met->type.label) {
       switch (met->type.id) {
         case METRICS_INT_KAFKA_FLUSH_CNT:
-          //TODO
-          break;
-        case METRICS_INT_KAFKA_FLUSH_MSG_SENT:
-          //TODO
-          break;
-        case METRICS_INT_KAFKA_FLUSH_MSG_ERR:
-          //TODO
-          break;
-        case METRICS_INT_KAFKA_FLUSH_TIME:
-          //TODO
+          met->int_value = kfk_metrics->flush_cnt;
           break;
       }
     }
     met = met->next;
   }
+  */
 }

@@ -85,7 +85,7 @@ void usage_daemon(char *prog_name)
   printf("For suggestions, critics, bugs, contact me: %s.\n", MANTAINER);
 }
 
-void nfacctd_generate_stats(void *ptr)
+void *nfacctd_generate_stats(void *ptr)
 {
   int val, tpl_idx;
   unsigned char buf[SRVBUFLEN];
@@ -800,6 +800,12 @@ int main(int argc,char **argv, char **envp)
 
   init_classifiers(NULL);
 
+  if (config.intstats_daemon) {
+    /* Metrics memory is mapped before loading the plugins so that
+     * forked plugin processes have access to it */
+    init_metrics_mem();
+  }
+
   /* plugins glue: creation */
   load_plugins(&req);
   load_plugin_filters(1);
@@ -810,7 +816,8 @@ int main(int argc,char **argv, char **envp)
 
 #if defined ENABLE_THREADS
   /* starting the internal stats thread
-   * NB: this needs to be done once the plugins are loaded to gather proper stats data */
+   * NB: this needs to be done once the plugins are loaded to properly gather
+   * metrics according to possibly named configs */
   if (config.intstats_daemon) {
     memset(&nf_metrics, 0, sizeof(nf_metrics));
     intstats_wrapper(channels_list, nfacctd_generate_stats);

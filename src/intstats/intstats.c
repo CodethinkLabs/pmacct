@@ -32,8 +32,7 @@
 
 /* variables to be exported away */
 thread_pool_t *intstats_pool;
-struct stats_channel_entry stats_channels_list[MAX_N_PLUGINS]; /* stats communication channels: core <-> plugins */
-struct channels_list_entry *channels_list; // TODO make it usable for several daemons
+struct channels_list_entry *channels_list; /* communication channels: core <-> plugins */
 struct daemon_stats_linked_func *daemon_stats_funcs = NULL; /* pointer to first daemon stats generation function */
 struct active_thread *at;
 
@@ -42,7 +41,7 @@ struct active_thread *at;
 // all the previous ones (if all of this code works properly)
 /* Functions */
 #if defined ENABLE_THREADS
-void intstats_wrapper(const struct channels_list_entry *chan_list, void (*func)())
+void intstats_wrapper(const struct channels_list_entry *chan_list, void *(*func)(void *))
 {
   struct intstats_data *t_data;
   struct daemon_stats_linked_func *dslf = NULL, *prev_dslf = NULL;
@@ -105,27 +104,11 @@ void intstats_daemon(void *t_data_void)
   time_t start, end;
   sighandler_t prev_sig;
   int sock, nb_children, nb_term;
-  int counter = 0, test; // TEST
-
-  /* The first metric should not need to be on a shared memory area since metrics are
-   * initialised following an array which first element represents a metric that is currently
-   * computed in this thread. However, this is done so to maintain consistency with other metrics
-   * structures and avoid side effects in case plugin_buffers_generate_stats() eventually creates
-   * its own thread(s). */
-  met = map_shared(0, sizeof(struct metric), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-  if (met == MAP_FAILED) {
-    Log(LOG_ERR, "ERROR ( %s/core/STATS ): unable to allocate metric structure. Exiting ...\n", config.name);
-    exit(1);
-  }
-
-  memset(met, 0, sizeof(struct metric));
 
   if (init_metrics(&met) <= 0) {
     Log(LOG_ERR, "ERROR ( %s/core/STATS ): Error during metrics initialisation. Exiting.\n", config.name);
     exit(1);
   }
-  //check_test_met(met);
-  Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): metric values initialised\n", config.name);
 
   sock = init_statsd_sock();
   Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): socket initialized\n", config.name);
@@ -133,44 +116,31 @@ void intstats_daemon(void *t_data_void)
   if (!config.statsd_refresh_time) config.statsd_refresh_time = STATS_REFRESH_TIME_DEFAULT;
 
   //XXX: this periodicity implementation assumes stats collection and sending combined are shorter than configured period
-  Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): CONFIGURED REFRESH TIME: %d\n", config.name, config.statsd_refresh_time);
   while (1) {
     nb_children = 0;
     nb_term = 0;
     start = time(NULL);
-    reset_metrics_values(met);
-    Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): metric values reset\n", config.name);
 
-    nb_children += launch_core_daemons(met);
-    Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): core daemon launched\n", config.name);
-    nb_children += launch_plugins_daemons(met);
-    Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): plugins daemon launched\n", config.name);
+    nb_children += launch_core_threads();
+    nb_children += launch_plugins_threads();
 
     plugin_buffers_generate_stats(met);
 
-    int term_pid = -1;
-    while ((term_pid = waitpid(-1, NULL, WUNTRACED)) > 0) {
-      /* Terminated thread is deleted from the list only if it is one
-       * of the threads that were being waited for */
-      if (delete_active_thread(term_pid)) nb_term++;
-      printf("Just terminated process ID: %d\n", term_pid);
-      printf("nb_term: %d , nb_children: %d\n", nb_term, nb_children);
-      print_active_threads(); // TEST
-
-      if (!at || !check_active_threads()) break;
+    while (at) {
+      if (!pthread_join(*(at->thread), NULL)) {
+        delete_active_thread(at->thread);
+        at = at->next;
+      }
     }
 
     met_tmp = met;
-    while(met_tmp) {
+    while (met_tmp) {
       send_data(met_tmp, sock);
       met_tmp = met_tmp->next;
     }
     end = time(NULL);
-    prev_sig = signal(SIGCHLD, SIG_IGN); /* SIGCHLD has to be ignored otherwise sleep is interrupted */
-    test = sleep(MAX(0, config.statsd_refresh_time - (end - start)));
-    signal(SIGCHLD, prev_sig);
-    Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): --------- finished iteration #%d (%u left to sleep)\n", config.name, counter, test);
-    counter++;
+    sleep(MAX(0, config.statsd_refresh_time - (end - start)));
+    reset_metrics_values(met);
   }
 }
 
@@ -222,37 +192,25 @@ void print_metrics(struct metric *ptr)
 }
 
 
-int launch_plugins_daemons(struct metric *met_ptr)
+int launch_plugins_threads()
 {
-  int pid, ret, index = 0, thread_cnt = 0;
+  int thread_cnt = 0;
   struct plugins_list_entry *list = plugins_list;
+  pthread_t *plugin_thread;
 
   while (list) {
     if (list->cfg.intstats_daemon && list->type.stats_func) {
-      switch (pid = fork()) {
-        case -1: /* Something went wrong */
-          Log(LOG_WARNING, "WARN ( %s/%s ): Unable to initialize stats generation in: %s\n", list->name, list->type.string, strerror(errno));
-          break;
-        case 0: /* Child */
-        /* SIGCHLD handling issue: SysV avoids zombies by ignoring SIGCHLD; to emulate
-           such semantics on BSD systems, we need a handler like handle_falling_child() */
-#if defined (IRIX) || (SOLARIS)
-          signal(SIGCHLD, SIG_IGN);
-#else
-          signal(SIGCHLD, ignore_falling_child);
-#endif
-
-#if defined HAVE_MALLOPT
-          mallopt(M_CHECK_ACTION, 0);
-#endif
-
-          (*list->type.stats_func)(met_ptr, list->cfg.name);
-          exit(0);
-        default: /* Parent */
-          insert_active_thread(pid);
-          printf("Kafka: Just started process ID: %d\n", pid); //TEST
-          thread_cnt++;
-          break;
+      plugin_thread = malloc(sizeof(pthread_t));
+      if (!plugin_thread) {
+        Log(LOG_ERR, "ERROR ( %s/%s ): unable to allocate pthread structure. Exiting ...\n", list->name, list->type.string);
+        exit(1);
+      }
+      if (!pthread_create(plugin_thread, NULL, *list->type.stats_func, &list->cfg)) {
+        insert_active_thread(plugin_thread);
+        thread_cnt++;
+      }
+      else {
+          Log(LOG_WARNING, "WARN ( %s/%s ): Unable to initialize stats generation: %s\n", list->name, list->type.string, strerror(errno));
       }
     }
     list = list->next;
@@ -260,50 +218,28 @@ int launch_plugins_daemons(struct metric *met_ptr)
   return thread_cnt;
 }
 
-int launch_core_daemons(struct metric *met_ptr)
+int launch_core_threads()
 {
-  struct plugins_list_entry *list = plugins_list;
   struct daemon_stats_linked_func *dslf;
-  struct active_thread *at_tmp;
-  int pid, status, thread_cnt = 0;
+  pthread_t *core_thread;
+  int thread_cnt = 0;
 
   dslf = daemon_stats_funcs;
-  if(!dslf) Log(LOG_ERR, "dslf NULL\n");
   while (dslf) {
     if(dslf->func) {
-      switch (pid = fork()) {
-        case -1: /* Something went wrong */
-          Log(LOG_WARNING, "WARN ( %s/core ): Unable to initialize stats generation in daemon: %s\n", config.name, config.proc_name, strerror(errno));
-          //delete_pipe_channel(list->pipe[1]);
-          break;
-        case 0: /* Child */
-        /* SIGCHLD handling issue: SysV avoids zombies by ignoring SIGCHLD; to emulate
-           such semantics on BSD systems, we need a handler like handle_falling_child() */
-#if defined (IRIX) || (SOLARIS)
-          signal(SIGCHLD, SIG_IGN);
-#else
-          signal(SIGCHLD, ignore_falling_child);
-#endif
-
-#if defined HAVE_MALLOPT
-          mallopt(M_CHECK_ACTION, 0);
-#endif
-
-          /*
-          close(config.sock);
-          close(config.bgp_sock);
-          if (!list->cfg.pipe_amqp) close(list->pipe[1]);
-          */
-          (*dslf->func)(met_ptr);
-          exit(0);
-        default: /* Parent */
-          insert_active_thread(pid);
-          printf("Core: Just started process ID: %d\n", pid); //TEST
-          thread_cnt++;
-          break;
+      core_thread = malloc(sizeof(pthread_t));
+      if (!core_thread) {
+        Log(LOG_ERR, "ERROR ( %s/core/STATS ): unable to allocate pthread structure. Exiting ...\n", config.name);
+        exit(1);
+      }
+      if (!pthread_create(core_thread, NULL, *dslf->func, met)) {
+        insert_active_thread(core_thread);
+        thread_cnt++;
+      }
+      else {
+        Log(LOG_WARNING, "WARN ( %s/core ): Unable to initialize stats generation in daemon: %s\n", config.name, config.proc_name, strerror(errno));
       }
     }
-    thread_cnt++;
     dslf = dslf->next;
   }
 
@@ -367,15 +303,6 @@ int init_metrics(struct metric **met_ptr)
       if(list->cfg.metrics_what_to_count & _metrics_types_matrix[met_idx].id
           && (list->type.id == _metrics_types_matrix[met_idx].plugin_id)) {
 
-        if (prev_met) {
-          met_tmp = map_shared(0, sizeof(struct metric), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-          if (met_tmp == MAP_FAILED) {
-            Log(LOG_ERR, "ERROR ( %s/%s/STATS ): unable to allocate metric structure. Exiting ...\n", list->cfg.name, list->type.string);
-            exit(1);
-          }
-          memset(met_tmp, 0, sizeof(struct metric));
-        }
-
         met_tmp->type = _metrics_types_matrix[met_idx];
 
         /* Prefix metric label with possible plugin name, truncated if needed
@@ -397,6 +324,7 @@ int init_metrics(struct metric **met_ptr)
         if (prev_met) prev_met->next = met_tmp;
 
         prev_met = met_tmp;
+        met_tmp = met_tmp->next;
         met_cnt++;
       }
     }
@@ -411,21 +339,25 @@ void reset_metrics_values(struct metric *m)
   struct metric *m_tmp;
   m_tmp = m;
   while (m_tmp) {
-    switch(m_tmp->type.type) {
-      case STATS_TYPE_INT:
-        m_tmp->int_value = 0;
-        break;
-      case STATS_TYPE_LONGINT:
-        m_tmp->long_value = 0;
-        break;
-      case STATS_TYPE_FLOAT:
-        m_tmp->float_value = 0.0;
-        break;
-      case STATS_TYPE_STRING:
-        m_tmp->string_value = "";
-        break;
-      default:
-        break;
+    // TODO: are gauges the only kind of metrics that should NOT be reset?
+    // or should this be managed the other way around, eg 'only reset counters'?
+    if (m_tmp->type.statsd_fmt != STATSD_FMT_GAUGE) {
+      switch(m_tmp->type.type) {
+        case STATS_TYPE_INT:
+          m_tmp->int_value = 0;
+          break;
+        case STATS_TYPE_LONGINT:
+          m_tmp->long_value = 0;
+          break;
+        case STATS_TYPE_FLOAT:
+          m_tmp->float_value = 0.0;
+          break;
+        case STATS_TYPE_STRING:
+          m_tmp->string_value = "";
+          break;
+        default:
+          break;
+      }
     }
     m_tmp = m_tmp->next;
   }
@@ -558,30 +490,30 @@ int send_data(struct metric *m, int sd) {
   return ret;
 }
 
-void insert_active_thread(int pid) {
+void insert_active_thread(pthread_t *th) {
   struct active_thread *at_tmp;
 
   if (!at) {
     at = malloc(sizeof(struct active_thread));
     memset(at, 0, sizeof(struct active_thread));
-    at->pid = pid;
+    at->thread = th;
   }
   else {
     at_tmp = malloc(sizeof(struct active_thread));
     memset(at_tmp, 0, sizeof(struct active_thread));
-    at_tmp->pid = pid;
+    at_tmp->thread = th;
     at_tmp->next = at;
     at = at_tmp;
   }
 }
 
-int delete_active_thread(int pid) {
+int delete_active_thread(pthread_t *th) {
   struct active_thread *at_tmp, *at_del, *at_prev = NULL;
   int ret = 0;
 
   at_tmp = at;
   while (at_tmp) {
-      if (at_tmp->pid == pid) {
+      if (at_tmp->thread == th) {
         at_del = at_tmp;
         if (!at_prev) {
           at = at_tmp->next;
@@ -589,6 +521,7 @@ int delete_active_thread(int pid) {
         else {
           at_prev->next = at_tmp->next;
         }
+        free(th);
         free(at_tmp);
         ret++;
         break;
@@ -599,29 +532,31 @@ int delete_active_thread(int pid) {
   return ret;
 }
 
-int check_active_threads() {
-  struct active_thread *at_tmp;
-  int nb_threads = 0;
+void init_metrics_mem()
+{
+  int met_idx;
+  struct metric *met_tmp, *prev_met = NULL;
+  struct plugins_list_entry *list = plugins_list;
 
-  at_tmp = at;
-  while (at_tmp) {
-    nb_threads++;
-    if (kill(at_tmp->pid, 0) == -1) {
-      int pid = at_tmp->pid;
-      delete_active_thread(at_tmp->pid);
-      printf("Deleted non-existent thread %d\n", pid);
-      nb_threads--;
+  while (list) {
+    for(met_idx = 0; strcmp(_metrics_types_matrix[met_idx].label, ""); met_idx++) {
+
+      if(list->cfg.metrics_what_to_count & _metrics_types_matrix[met_idx].id
+          && (list->type.id == _metrics_types_matrix[met_idx].plugin_id)) {
+
+        met_tmp = map_shared(0, sizeof(struct metric), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+        if (met_tmp == MAP_FAILED) {
+          Log(LOG_ERR, "ERROR ( %s/core/STATS ): unable to allocate metric structure. Exiting ...\n", config.name);
+          exit(1);
+        }
+
+        if (prev_met) prev_met->next = met_tmp;
+        else met = met_tmp;
+
+        prev_met = met_tmp;
+      }
     }
-    at_tmp = at_tmp->next;
+    list->cfg.met = met;
+    list = list->next;
   }
-  return nb_threads; /* remaining active threads */
-}
-
-void print_active_threads() {
-  //XXX: Test function. Can be safely deleted once internal stats are stable
-    struct active_thread *at_tmp = at;
-    while(at_tmp) {
-        printf("Active thread pid: %d\n", at_tmp->pid);
-        at_tmp = at_tmp->next;
-    }
 }

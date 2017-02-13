@@ -19,6 +19,8 @@
     Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 */
 
+#include <pthread.h>
+
 /* defines */
 #define STATS_REFRESH_TIME_DEFAULT  60
 #define STATS_SRC_PORT_DEFAULT      8124
@@ -38,19 +40,11 @@
 struct intstats_data {
   int is_thread;
   char *log_str;
-
-  //telemetry_stats global_stats;
   time_t now;
 };
 
-struct stats_channel_entry {
-  struct plugins_list_entry *plugin;
-  int pipe[2];
-  int used; /* true (1) or false (0) */
-};
-
 struct daemon_stats_linked_func {
-  void (*func) (void *);
+  void * (*func) (void *);
   struct daemon_stats_linked_func *next;
 };
 
@@ -74,7 +68,7 @@ struct metric {
 };
 
 struct active_thread {
-  int pid;
+  pthread_t *thread;
   struct active_thread *next;
 };
 
@@ -94,14 +88,6 @@ static const struct metric_type _metrics_types_matrix[] = {
  { "kafka_flush_time", STATS_TYPE_FLOAT, STATSD_FMT_TIMING, METRICS_INT_KAFKA_FLUSH_TIME, PLUGIN_ID_KAFKA},
  { "", -1, -1, -1, PLUGIN_ID_UNKNOWN}
 };
-
-/*
-// One set of channels per daemon
-struct daemon_channels_list {
-  const struct channel_entry channels_list[MAX_N_PLUGINS];
-  struct channel_entry *next[MAX_N_PLUGINS];
-}
-*/
 
 /* functions */
 #if (!defined __INTSTATSD_C)

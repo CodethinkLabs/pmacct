@@ -535,6 +535,7 @@ struct configuration {
   char *intstats_src_ip;
   int intstats_src_port;
   size_t thread_stack;
+  struct metric *met;
 };
 
 /* prototypes */ 
