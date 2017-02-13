@@ -467,6 +467,9 @@ int send_data(struct metric *m, int sd) {
     case STATSD_FMT_GAUGE:
       statsd_type = "g";
       break;
+    case STATSD_FMT_TIMING:
+      statsd_type = "ms";
+      break;
   }
 
   sprintf(data, "%s:%s|%s", m->type.label, val_str, statsd_type);
