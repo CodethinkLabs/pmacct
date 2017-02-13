@@ -139,8 +139,8 @@ void intstats_daemon(void *t_data_void)
       met_tmp = met_tmp->next;
     }
     end = time(NULL);
-    sleep(MAX(0, config.statsd_refresh_time - (end - start)));
     reset_metrics_values(met);
+    sleep(MAX(0, config.statsd_refresh_time - (end - start)));
   }
 }
 
