@@ -53,6 +53,7 @@ struct ch_status {
   u_int8_t wakeup;		/* plugin is polling */ 
   u_int32_t backlog;
   u_int64_t last_buf_off;	/* offset of last committed buffer */
+  u_int64_t last_plugin_off;	/* offset of last buffer copied by the plugin (for reporting) */
 };
 
 struct sampling {

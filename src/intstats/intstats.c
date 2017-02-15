@@ -248,18 +248,24 @@ int launch_core_threads()
 
 void plugin_buffers_generate_stats(struct metric *met_ptr)
 {
-  struct plugins_list_entry *plugin;
-  struct channels_list_entry *cle = channels_list;
-  struct metric *met_tmp, *fill_rate_met = NULL;
-  int index, tot_sz = 0, used_sz = 0;
+  struct channels_list_entry *cle;
+  struct metric *met_tmp, *fill_rate_met = NULL, *used_sz_met = NULL;
+  int index;
+  u_int64_t tot_sz = 0, curr_used_sz, used_sz = 0, last_plugin_off;
 
   //XXX: could eventually launch a separate thread if more metrics are needed
   for (index = 0; index < MAX_N_PLUGINS; index++) {
-    plugin = cle[index].plugin;
-    if (plugin == NULL) continue;
+    cle = &channels_list[index];
+    if (cle->plugin == NULL) continue;
 
     tot_sz += cle->rg.end - cle->rg.base;
-    used_sz += cle->rg.ptr - cle->rg.base;
+
+    last_plugin_off = (cle->rg.ptr - cle->rg.base);
+    curr_used_sz = cle->status->last_buf_off >= cle->status->last_plugin_off
+              ? cle->status->last_buf_off - cle->status->last_plugin_off
+              : ((u_int64_t)(cle->rg.end - cle->rg.base) - (cle->status->last_plugin_off - cle->status->last_buf_off));
+
+    used_sz += curr_used_sz;
 
     met_tmp = met_ptr;
     while (met_tmp) {
@@ -268,25 +274,26 @@ void plugin_buffers_generate_stats(struct metric *met_ptr)
           met_tmp->int_value += cle->rg.end - cle->rg.base;
           break;
         case METRICS_INT_PLUGIN_QUEUES_USED_SZ:
-          met_tmp->int_value += cle->rg.ptr - cle->rg.base;
+          used_sz_met = met_tmp;
           break;
         case METRICS_INT_PLUGIN_QUEUES_USED_CNT:
-          //TODO check functional validity
-          met_tmp->int_value += (int) ((cle->rg.ptr - cle->rg.base) / sizeof(struct pkt_data));
+          met_tmp->int_value += (int)(curr_used_sz / cle->bufsize);
           break;
         case METRICS_INT_PLUGIN_QUEUES_FILL_RATE:
-          //TODO check functional validity
           fill_rate_met = met_tmp;
           break;
         default:
           break;
-    }
+      }
     met_tmp = met_tmp->next;
     }
   }
 
+  if (used_sz_met) {
+    used_sz_met->int_value = used_sz;
+  }
   if (fill_rate_met) {
-    fill_rate_met->float_value = (float) (100 * used_sz) / (float) tot_sz;
+    fill_rate_met->float_value = (tot_sz == 0 ? (float) 0 : (float) (100 * used_sz) / (float) tot_sz);
   }
 }
 
