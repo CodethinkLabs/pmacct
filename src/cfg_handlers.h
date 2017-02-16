@@ -444,4 +444,5 @@ EXT int cfg_key_metrics(char *, char *, char *);
 
 EXT void parse_time(char *, char *, int *, int *);
 EXT void cfg_set_aggregate(char *, u_int64_t [], u_int64_t, char *);
+EXT void cfg_set_metric(char *, u_int64_t [], u_int64_t, char *);
 #undef EXT
