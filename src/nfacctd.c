@@ -106,7 +106,6 @@ void *nfacctd_generate_stats(void *ptr)
         met->int_value = val;
         break;
       case METRICS_INT_NFACCTD_UDP_RX_QUEUE:
-        //TODO check functional validity
         met->int_value = nf_metrics.udp_rcv_buf;
         break;
       case METRICS_INT_NFACCTD_UDP_TX_QUEUE:
@@ -114,11 +113,15 @@ void *nfacctd_generate_stats(void *ptr)
         break;
       case METRICS_INT_NFACCTD_UDP_DROP_CNT:
 	//TODO check functional validity
-        met->int_value = nf_metrics.udp_drop_cnt;
+        met->int_value = get_udp_drops(config.sock); //probably not the right socket, or additional operations are needed to get the matching socket number in /proc/net/udp from config.sock
         break;
     }
     met = met->next;
   }
+  /* reset metrics for next run */
+  nf_metrics.rcv_pkt = 0;
+  nf_metrics.udp_drop_cnt = 0;
+  nf_metrics.udp_rcv_buf = 0;
 }
 
 int main(int argc,char **argv, char **envp)
@@ -2530,3 +2533,67 @@ void increment_metric(int *val_ptr)
     else if (val_ptr == &nf_metrics.udp_drop_cnt && config.metrics_what_to_count & METRICS_INT_NFACCTD_UDP_DROP_CNT)
       nf_metrics.udp_drop_cnt++;
 }
+
+#if defined(__linux__)
+int get_udp_drops()
+{
+  FILE *f;
+  int size = LARGEBUFLEN, first_line = TRUE;
+  int index, drop_col=-1, nb_read_lines = 0;
+  char *path = "/proc/net/udp", *token, *saveptr, *row;
+  char buf[size], save_buf[size], addr_hex[SRVBUFLEN];
+  struct sockaddr_in local_addr;
+  socklen_t addr_len = sizeof(local_addr);
+
+  getsockname(config.sock, (struct sockaddr *)&local_addr, &addr_len);
+
+  sprintf(addr_hex, "%.8x:%.4x", local_addr.sin_addr.s_addr, config.nfacctd_port);
+  memset(buf, 0, size);
+  f = fopen(path, "r");
+  if (!f) {
+    Log(LOG_ERR, "ERROR ( %s/%s ): [%s] file does not exist.\n", config.name, config.type, path);
+    return -1;
+  }
+
+  while (fgets(buf, size, f)) {
+    if (first_line) {
+      memcpy(save_buf, buf, size);
+      row = &save_buf[0];
+      token = strtok_r(row, " ", &saveptr);
+
+      while (token) {
+        row = NULL;
+        if (!strstr("drops", token)) drop_col++;
+        else break;
+        token = strtok_r(row, " ", &saveptr);
+      }
+      drop_col--; /* rx_queue and tx_queue headers are separated by a ':' */
+
+      first_line = FALSE;
+      continue;
+    }
+
+    lower_string(buf);
+    if (strstr(buf, addr_hex)) {
+      memcpy(save_buf, buf, size);
+      row = &save_buf[0];
+      for (index = 0; index < drop_col; index++) {
+        token = strtok_r(row, " ", &saveptr);
+        if (!token) return -1;
+        row = NULL;
+      }
+      return atoi(strtok_r(row, " ", &saveptr));
+    }
+    nb_read_lines++;
+  }
+  fclose(f);
+
+  return -1;
+}
+#else
+int get_udp_drops()
+{
+  Log(LOG_INFO, "INFO ( %s/core ): UDP drops retrieval is only supported on Linux kernels.\n", config.name);
+  return -1;
+}
+#endif
