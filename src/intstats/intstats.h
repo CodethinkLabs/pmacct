@@ -99,5 +99,9 @@ EXT void intstats_wrapper();
 EXT void intstats_daemon(void *);
 EXT void intstats_prepare_thread(struct intstats_data *);
 
+EXT void insert_active_thread(pthread_t *);
+EXT void reset_metrics_values(struct metric *);
+EXT void plugin_buffers_generate_stats(struct metric *);
+
 EXT struct metric *met;
 #undef EXT
