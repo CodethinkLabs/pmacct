@@ -126,10 +126,11 @@ void intstats_daemon(void *t_data_void)
 
     plugin_buffers_generate_stats(met);
 
+
     while (at) {
       if (!pthread_join(*(at->thread), NULL)) {
         delete_active_thread(at->thread);
-        at = at->next;
+        if (at) at = at->next;
       }
     }
 
