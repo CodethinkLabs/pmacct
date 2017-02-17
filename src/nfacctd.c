@@ -2538,13 +2538,16 @@ void increment_metric(int *val_ptr)
 int get_udp_drops()
 {
   FILE *f;
-  int size = LARGEBUFLEN, found = FALSE, first_line = TRUE;
-  int index, drop_col=-1;
+  int size = LARGEBUFLEN, first_line = TRUE;
+  int index, drop_col=-1, nb_read_lines = 0;
   char *path = "/proc/net/udp", *token, *saveptr, *row;
-  //char *ptr, *path = "/home/corentinneau/Projects/BL010_201611/test_udp_drops", *token, *saveptr, *row;
-  char buf[size], save_buf[size], addr_hex[SRVBUFLEN]; //can probably be shorter
+  char buf[size], save_buf[size], addr_hex[SRVBUFLEN];
+  struct sockaddr_in local_addr;
+  socklen_t addr_len = sizeof(local_addr);
 
-  sprintf(addr_hex, "%.8x:%.4x", config.nfacctd_ip, config.nfacctd_port);
+  getsockname(config.sock, (struct sockaddr *)&local_addr, &addr_len);
+
+  sprintf(addr_hex, "%.8x:%.4x", local_addr.sin_addr.s_addr, config.nfacctd_port);
   memset(buf, 0, size);
   f = fopen(path, "r");
   if (!f) {
@@ -2552,10 +2555,7 @@ int get_udp_drops()
     return -1;
   }
 
-  int nb_read_lines = 0;
-  while (!found) {
-    if(!fgets(buf, size, f)) break;
-
+  while (fgets(buf, size, f)) {
     if (first_line) {
       memcpy(save_buf, buf, size);
       row = &save_buf[0];
@@ -2573,6 +2573,7 @@ int get_udp_drops()
       continue;
     }
 
+    lower_string(buf);
     if (strstr(buf, addr_hex)) {
       memcpy(save_buf, buf, size);
       row = &save_buf[0];
@@ -2581,10 +2582,7 @@ int get_udp_drops()
         if (!token) return -1;
         row = NULL;
       }
-      char *test =strtok_r(row, " ", &saveptr);
-      printf("Found %s drops converted as %d\n", test, atoi(test));
-      return atoi(test);
-      found = TRUE;
+      return atoi(strtok_r(row, " ", &saveptr));
     }
     nb_read_lines++;
   }
