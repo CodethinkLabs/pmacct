@@ -102,7 +102,6 @@ void intstats_daemon(void *t_data_void)
 {
   struct metric *met_tmp = NULL;
   time_t start, end;
-  sighandler_t prev_sig;
   int sock, nb_children, nb_term;
 
   if (init_metrics(&met) <= 0) {
@@ -504,7 +503,8 @@ int send_data(struct metric *m, int sd) {
   return ret;
 }
 
-void insert_active_thread(pthread_t *th) {
+void insert_active_thread(pthread_t *th)
+{
   struct active_thread *at_tmp;
 
   if (!at) {
@@ -522,13 +522,12 @@ void insert_active_thread(pthread_t *th) {
 }
 
 int delete_active_thread(pthread_t *th) {
-  struct active_thread *at_tmp, *at_del, *at_prev = NULL;
+  struct active_thread *at_tmp, *at_prev = NULL;
   int ret = 0;
 
   at_tmp = at;
   while (at_tmp) {
       if (at_tmp->thread == th) {
-        at_del = at_tmp;
         if (!at_prev) {
           at = at_tmp->next;
         }
