@@ -481,6 +481,9 @@ int send_data(struct metric *m, int sd) {
 
   sprintf(data, "%s:%s|%s", m->type.label, val_str, statsd_type);
 
+  if (!config.statsd_host) config.statsd_host = STATS_DST_HOST_DEFAULT;
+  if (!config.statsd_port) config.statsd_port = STATS_DST_PORT_DEFAULT;
+
   ret = str_to_addr(config.statsd_host, &dest_addr);
   if (!ret) {
     Log(LOG_ERR, "ERROR ( %s/%s ): statsd_host value is not a valid IPv4/IPv6 address. Terminating.\n", config.name, config.type);

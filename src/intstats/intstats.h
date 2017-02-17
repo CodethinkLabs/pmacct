@@ -24,6 +24,8 @@
 /* defines */
 #define STATS_REFRESH_TIME_DEFAULT  60
 #define STATS_SRC_PORT_DEFAULT      8124
+#define STATS_DST_HOST_DEFAULT      "127.0.0.1"
+#define STATS_DST_PORT_DEFAULT      8125
 
 #define STATS_TYPE_INT              0
 #define STATS_TYPE_LONGINT          1
