@@ -111,9 +111,11 @@ void *nfacctd_generate_stats(void *ptr)
       case METRICS_INT_NFACCTD_UDP_TX_QUEUE:
         //TODO
         break;
-      case METRICS_INT_NFACCTD_UDP_DROP_CNT:
-	//TODO check functional validity
-        met->int_value = get_udp_drops(config.sock); //probably not the right socket, or additional operations are needed to get the matching socket number in /proc/net/udp from config.sock
+      case METRICS_INT_NFACCTD_UDP_SOCK_DROP_CNT:
+        met->int_value = get_udp_drops(config.sock);
+        break;
+      case METRICS_INT_NFACCTD_UDP_APP_DROP_CNT:
+        met->int_value = nf_metrics.udp_drop_cnt;
         break;
     }
     met = met->next;
@@ -2530,7 +2532,7 @@ void increment_metric(int *val_ptr)
 
     if (val_ptr == &nf_metrics.rcv_pkt && config.metrics_what_to_count & METRICS_INT_NFACCTD_RCV_PKT)
       nf_metrics.rcv_pkt++;
-    else if (val_ptr == &nf_metrics.udp_drop_cnt && config.metrics_what_to_count & METRICS_INT_NFACCTD_UDP_DROP_CNT)
+    else if (val_ptr == &nf_metrics.udp_drop_cnt && config.metrics_what_to_count & METRICS_INT_NFACCTD_UDP_APP_DROP_CNT)
       nf_metrics.udp_drop_cnt++;
 }
 
