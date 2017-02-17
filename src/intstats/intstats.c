@@ -54,7 +54,6 @@ void intstats_wrapper(const struct channels_list_entry *chan_list, void *(*func)
   /* initialize threads pool */
   intstats_pool = allocate_thread_pool(1);
   assert(intstats_pool);
-  Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): %d thread(s) initialized\n", config.name, 1);
 
   t_data = malloc(sizeof(struct intstats_data));
   if (!t_data) {
@@ -84,7 +83,6 @@ void intstats_wrapper(const struct channels_list_entry *chan_list, void *(*func)
 
   /* giving a kick to the intstats thread */
   send_to_pool(intstats_pool, intstats_daemon, t_data);
-  Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): intstats_daemon sent to pool\n", config.name);
 }
 #endif
 
@@ -102,7 +100,7 @@ void intstats_daemon(void *t_data_void)
 {
   struct metric *met_tmp = NULL;
   time_t start, end;
-  int sock, nb_children, nb_term;
+  int sock, nb_children;
 
   if (init_metrics(&met) <= 0) {
     Log(LOG_ERR, "ERROR ( %s/core/STATS ): Error during metrics initialisation. Exiting.\n", config.name);
@@ -117,7 +115,6 @@ void intstats_daemon(void *t_data_void)
   //XXX: this periodicity implementation assumes stats collection and sending combined are shorter than configured period
   while (1) {
     nb_children = 0;
-    nb_term = 0;
     start = time(NULL);
 
     nb_children += launch_core_threads();
@@ -143,54 +140,6 @@ void intstats_daemon(void *t_data_void)
     sleep(MAX(0, config.statsd_refresh_time - (end - start)));
   }
 }
-
-int check_test_met(struct metric const *met_ptr)
-{
-  //XXX: Test function. Can be safely deleted once internal stats are stable
-  int cnt = 0;
-  struct metric *tmp;
-
-  tmp = met_ptr;
-  while (tmp) { cnt++; tmp = tmp->next; }
-  Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): TEST: %d metrics found (%p)\n", config.name, cnt, met_ptr);
-
-  return cnt;
-}
-
-void print_metrics(struct metric *ptr)
-{
-  //XXX: Test function. Can be safely deleted once internal stats are stable
-  struct metric *tmp;
-  tmp = ptr;
-
-  while(tmp) {
-    Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): address: %p, \n", config.name, tmp);
-    Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): label: %s, \n", config.name, tmp->type.label);
-    Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): type: %d, \n", config.name, tmp->type.type);
-    Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): statsd_fmt: %d, \n", config.name, tmp->type.statsd_fmt);
-    Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): id: %d, \n", config.name, tmp->type.id);
-
-    switch(tmp->type.type) {
-      case STATS_TYPE_INT:
-        Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): value (int): %d, \n", config.name, tmp->int_value);
-        break;
-      case STATS_TYPE_LONGINT:
-        Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): value (long int): %ld, \n", config.name, tmp->long_value);
-        break;
-      case STATS_TYPE_FLOAT:
-        Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): value (float): %f, \n", config.name, tmp->float_value);
-        break;
-      case STATS_TYPE_STRING:
-        Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): value (string): %s, \n", config.name, tmp->string_value);
-        break;
-      default:
-        Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): ERROR: no type found, \n", config.name, tmp->string_value);
-        break;
-    }
-    tmp = tmp->next;
-  }
-}
-
 
 int launch_plugins_threads()
 {
@@ -346,8 +295,6 @@ void reset_metrics_values(struct metric *m)
   struct metric *m_tmp;
   m_tmp = m;
   while (m_tmp) {
-    // TODO: are gauges the only kind of metrics that should NOT be reset?
-    // or should this be managed the other way around, eg 'only reset counters'?
     if (m_tmp->type.statsd_fmt != STATSD_FMT_GAUGE) {
       switch(m_tmp->type.type) {
         case STATS_TYPE_INT:
