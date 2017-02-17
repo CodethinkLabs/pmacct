@@ -195,7 +195,8 @@ int cfg_key_metrics(char *filename, char *name, char *value_ptr)
     else if (!strcmp(count_token, "nfacctd_tpl_cnt")) cfg_set_metric(filename, value, METRICS_INT_NFACCTD_TPL_CNT, count_token);
     else if (!strcmp(count_token, "nfacctd_udp_tx_queue")) cfg_set_metric(filename, value, METRICS_INT_NFACCTD_UDP_TX_QUEUE, count_token);
     else if (!strcmp(count_token, "nfacctd_udp_rx_queue")) cfg_set_metric(filename, value, METRICS_INT_NFACCTD_UDP_RX_QUEUE, count_token);
-    else if (!strcmp(count_token, "nfacctd_udp_drop_count")) cfg_set_metric(filename, value, METRICS_INT_NFACCTD_UDP_DROP_CNT, count_token);
+    else if (!strcmp(count_token, "nfacctd_udp_app_drop_count")) cfg_set_metric(filename, value, METRICS_INT_NFACCTD_UDP_APP_DROP_CNT, count_token);
+    else if (!strcmp(count_token, "nfacctd_udp_sock_drop_count")) cfg_set_metric(filename, value, METRICS_INT_NFACCTD_UDP_SOCK_DROP_CNT, count_token);
     else if (!strcmp(count_token, "kafka_flush_count")) cfg_set_metric(filename, value, METRICS_INT_KAFKA_FLUSH_CNT, count_token);
     else if (!strcmp(count_token, "kafka_flush_msg_sent")) cfg_set_metric(filename, value, METRICS_INT_KAFKA_FLUSH_MSG_SENT, count_token);
     else if (!strcmp(count_token, "kafka_flush_msg_err")) cfg_set_metric(filename, value, METRICS_INT_KAFKA_FLUSH_MSG_ERR, count_token);

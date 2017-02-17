@@ -2581,8 +2581,12 @@ sendings.
               nfacctd_udp_tx_queue        Size (in bytes) currently used in the receiving buffer of nfacctd's
 listening socket
 
-              nfacctd_udp_drop_count      Number of UDP packets dropped by the kernel on nfacctd's listening socket.
-Notes: (a) This metric is reset between sendings. (b) This metric is currently only supported on Linux kernels.
+              nfacctd_udp_app_drop_count  Number of UDP packets dropped by nfacctd because not exploitable as
+Netflow/IPFIX packets: invalid, incomplete, etc. Note: This metric is reset between sendings.
+
+              nfacctd_udp_sock_drop_count Number of UDP packets dropped by the kernel on nfacctd's listening
+socket.  Notes: (a) This metric is reset between sendings. (b) This metric is currently only supported on Linux
+kernels.
 
               kafka_flush_count           Number of cache flushes (ie purges to the Kafka backend) made by the Kafka
 plugin
