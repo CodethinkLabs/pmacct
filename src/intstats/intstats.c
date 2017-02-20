@@ -33,7 +33,7 @@
 /* variables to be exported away */
 thread_pool_t *intstats_pool;
 struct channels_list_entry *channels_list; /* communication channels: core <-> plugins */
-struct daemon_stats_linked_func *daemon_stats_funcs = NULL; /* pointer to first daemon stats generation function */
+void * (*daemon_stats_func) (void *) = NULL; /* pointer to daemon stats generation function */
 struct active_thread *at;
 
 //TODO: note: stats will only work for one daemon at a time in the current config
@@ -44,7 +44,6 @@ struct active_thread *at;
 void intstats_wrapper(const struct channels_list_entry *chan_list, void *(*func)(void *))
 {
   struct intstats_data *t_data;
-  struct daemon_stats_linked_func *dslf = NULL, *prev_dslf = NULL;
 
   if (!config.metrics_what_to_count) {
     Log(LOG_WARNING, "WARN ( %s/core/STATS ): No metric set. Check your configuration.\n", config.name);
@@ -63,23 +62,7 @@ void intstats_wrapper(const struct channels_list_entry *chan_list, void *(*func)
   intstats_prepare_thread(t_data);
 
   channels_list = chan_list;
-  if (daemon_stats_funcs) dslf = daemon_stats_funcs;
-
-  while (dslf) {
-    prev_dslf = dslf;
-    dslf = dslf->next;
-  }
-  dslf = malloc(sizeof(struct daemon_stats_linked_func));
-  if (!dslf) {
-    Log(LOG_ERR, "ERROR ( %s/core/STATS ): Unable to allocate enough memory for a new daemon stats linked function.\n", config.name);
-    return;
-  }
-  memset(dslf, 0, sizeof(struct daemon_stats_linked_func));
-
-  dslf->func = func;
-  if (prev_dslf) prev_dslf->next = dslf;
-
-  if (!prev_dslf) daemon_stats_funcs = dslf;
+  daemon_stats_func = func;
 
   /* giving a kick to the intstats thread */
   send_to_pool(intstats_pool, intstats_daemon, t_data);
@@ -169,27 +152,20 @@ int launch_plugins_threads()
 
 int launch_core_threads()
 {
-  struct daemon_stats_linked_func *dslf;
   pthread_t *core_thread;
   int thread_cnt = 0;
 
-  dslf = daemon_stats_funcs;
-  while (dslf) {
-    if(dslf->func) {
-      core_thread = malloc(sizeof(pthread_t));
-      if (!core_thread) {
-        Log(LOG_ERR, "ERROR ( %s/core/STATS ): unable to allocate pthread structure. Exiting ...\n", config.name);
-        exit(1);
-      }
-      if (!pthread_create(core_thread, NULL, *dslf->func, met)) {
-        insert_active_thread(core_thread);
-        thread_cnt++;
-      }
-      else {
-        Log(LOG_WARNING, "WARN ( %s/core ): Unable to initialize stats generation in daemon: %s\n", config.name, config.proc_name, strerror(errno));
-      }
-    }
-    dslf = dslf->next;
+  core_thread = malloc(sizeof(pthread_t));
+  if (!core_thread) {
+    Log(LOG_ERR, "ERROR ( %s/core/STATS ): unable to allocate pthread structure. Exiting ...\n", config.name);
+    exit(1);
+  }
+  if (!pthread_create(core_thread, NULL, daemon_stats_func, met)) {
+    insert_active_thread(core_thread);
+    thread_cnt++;
+  }
+  else {
+    Log(LOG_WARNING, "WARN ( %s/core/STATS ): Unable to initialize stats generation in daemon: %s\n", config.name, config.proc_name, strerror(errno));
   }
 
   return thread_cnt;

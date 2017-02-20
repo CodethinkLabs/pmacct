@@ -45,11 +45,6 @@ struct intstats_data {
   time_t now;
 };
 
-struct daemon_stats_linked_func {
-  void * (*func) (void *);
-  struct daemon_stats_linked_func *next;
-};
-
 struct metric_type {
   char label[STATS_LABEL_LEN];
   int type;
