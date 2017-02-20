@@ -273,7 +273,7 @@ int init_metrics(struct metric **met_ptr)
           strncpy(met_tmp->type.label, lbl, STATS_LABEL_LEN - 1);
         }
 
-        Log(LOG_DEBUG, "DEBUG ( %s/%s/STATS ): Initializing metric \"%s\"\n", list->cfg.name, list->type.string, met_tmp->type.label);
+        Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): Initializing metric \"%s\"\n", config.name, met_tmp->type.label);
 
         if (met_ptr == NULL) met_ptr = &met_tmp;
 
@@ -355,7 +355,7 @@ int init_statsd_sock() {
     trim_spaces(config.intstats_src_ip);
     ret = str_to_addr(config.intstats_src_ip, &addr);
     if (!ret) {
-      Log(LOG_ERR, "ERROR ( %s/core ): 'intstats_src_ip' value is not valid. Exiting.\n", config.name);
+      Log(LOG_ERR, "ERROR ( %s/core/STATS ): 'intstats_src_ip' value is not valid. Exiting.\n", config.name);
       exit(1);
     }
     slen = addr_to_sa((struct sockaddr *)&server, &addr, config.intstats_src_port);
@@ -364,22 +364,22 @@ int init_statsd_sock() {
   sock = socket(((struct sockaddr *)&server)->sa_family, SOCK_DGRAM, 0);
 
   if (sock < 0) {
-    Log(LOG_ERR, "ERROR ( %s/%s ): socket() failed. Terminating.\n", config.name, config.type);
+    Log(LOG_ERR, "ERROR ( %s/core/STATS ): socket() failed. Terminating.\n", config.name);
     exit_all(1);
   }
 
   /* bind socket to port */
   rc = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char *)&yes, sizeof(yes));
-  if (rc < 0) Log(LOG_ERR, "WARN ( %s/%s ): setsockopt() failed for SO_REUSEADDR.\n", config.name, config.type);
+  if (rc < 0) Log(LOG_ERR, "WARN ( %s/core/STATS ): setsockopt() failed for SO_REUSEADDR.\n", config.name);
 
 #if (defined ENABLE_IPV6) && (defined IPV6_BINDV6ONLY)
   rc = setsockopt(sock, IPPROTO_IPV6, IPV6_BINDV6ONLY, (char *) &no, (socklen_t) sizeof(no));
-  if (rc < 0) Log(LOG_ERR, "WARN ( %s/%s ): setsockopt() failed for IPV6_BINDV6ONLY.\n", config.name, config.type);
+  if (rc < 0) Log(LOG_ERR, "WARN ( %s/core/STATS ): setsockopt() failed for IPV6_BINDV6ONLY.\n", config.name);
 #endif
 
   rc = bind(sock, (struct sockaddr *) &server, slen);
   if (rc < 0) {
-    Log(LOG_ERR, "ERROR ( %s/%s ): bind() to ip=%s port=%d/udp failed (errno: %d).\n", config.name, config.type, config.intstats_src_ip, config.intstats_src_port, errno);
+    Log(LOG_ERR, "ERROR ( %s/core/STATS ): bind() to ip=%s port=%d/udp failed: %d.\n", config.name, config.intstats_src_ip, config.intstats_src_port, strerror(errno));
     exit(1);
   }
   return sock;
@@ -433,7 +433,7 @@ int send_data(struct metric *m, int sd) {
 
   ret = str_to_addr(config.statsd_host, &dest_addr);
   if (!ret) {
-    Log(LOG_ERR, "ERROR ( %s/%s ): statsd_host value is not a valid IPv4/IPv6 address. Terminating.\n", config.name, config.type);
+    Log(LOG_ERR, "ERROR ( %s/core/STATS ): statsd_host value is not a valid IPv4/IPv6 address. Terminating.\n", config.name);
     exit_all(1);
   }
   dest_addr_len = addr_to_sa((struct sockaddr *)&dest_sockaddr, &dest_addr, config.statsd_port);
@@ -443,7 +443,7 @@ int send_data(struct metric *m, int sd) {
 
   ret = sendto(sd, databuf, buflen, 0, &dest_sockaddr, dest_addr_len);
   if (ret == -1)
-    Log(LOG_ERR, "ERROR ( %s/%s ): Error sending message :%s\n", config.name, config.type, strerror(errno));
+    Log(LOG_ERR, "ERROR ( %s/core/STATS ): Error sending message: %s\n", config.name, strerror(errno));
   else
     Log(LOG_DEBUG, "DEBUG ( %s/core/STATS ): sent data: %s\n", config.name, data);
 
